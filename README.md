@@ -1,2 +1,5 @@
-# microREST
+# Micro REST service
+
+### Libraries
+- libmicrohttpd
 
