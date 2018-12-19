@@ -17,6 +17,8 @@
 
 #define PORT 8888
 
+struct key_value_args kvtable[10];
+
 
 /**
  * Responses an error message
@@ -27,7 +29,7 @@
  * @return MHD_Response
  */
 struct MHD_Response *
-report_error (struct route_args args, const char *message, int status_code)
+report_error (struct func_args args, const char *message, int status_code)
 {
     struct MHD_Response * response;
     json_t *j = json_pack("{s:s,s:s}", "status", "error", "message", message);
@@ -46,12 +48,18 @@ report_error (struct route_args args, const char *message, int status_code)
  * @return MHD_Response
  */
 struct MHD_Response *
-route_func(struct route_args args){
+route_func(struct func_args args){
     int i;
     for(i=0;i<MAX_ROUTES; i++){
         if (0 == strcmp(rtable[i].url, args.url)) {
-            if (0 == strcmp(rtable[i].method, args.method)) 
-                return rtable[i].fctptr(args);
+            if (0 == strcmp(rtable[i].method, args.method)) {
+                /*
+                    iterate key values
+                    kvtable->key = "test";
+                    kvtable->value = "1";
+                */
+                return rtable[i].fctptr(args, kvtable);
+            }
             else
                 return report_error(args, "Method not allowed", MHD_HTTP_METHOD_NOT_ALLOWED);
         }
@@ -59,7 +67,7 @@ route_func(struct route_args args){
     return report_error(args, "Route not found", MHD_HTTP_NOT_FOUND);
 }
 
-/**
+/*
  * Request entry function
  */
 int 
@@ -68,44 +76,44 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
                       const char *version, const char *upload_data,
                       size_t *upload_data_size, void **con_cls)
 {
-  struct MHD_Response *response;
-  int ret;
-  (void)cls;               /* Unused. Silent compiler warning. */
-  (void)url;               /* Unused. Silent compiler warning. */
-  (void)method;            /* Unused. Silent compiler warning. */
-  (void)version;           /* Unused. Silent compiler warning. */
-  (void)upload_data;       /* Unused. Silent compiler warning. */
-  (void)upload_data_size;  /* Unused. Silent compiler warning. */
-  (void)con_cls;           /* Unused. Silent compiler warning. */
+    struct MHD_Response *response;
+    int ret;
+    (void)cls;               /* Unused. Silent compiler warning. */
+    (void)url;               /* Unused. Silent compiler warning. */
+    (void)method;            /* Unused. Silent compiler warning. */
+    (void)version;           /* Unused. Silent compiler warning. */
+    (void)upload_data;       /* Unused. Silent compiler warning. */
+    (void)upload_data_size;  /* Unused. Silent compiler warning. */
+    (void)con_cls;           /* Unused. Silent compiler warning. */
 
-  struct route_args args;
-  args.connection = connection;
-  args.url = url;
-  args.method =method;
-  args.version =version;
-  args.upload_data =upload_data;
-  args.upload_data_size =upload_data_size;
-  args.con_cls = con_cls;
+    struct func_args args;
+    args.connection = connection;
+    args.url = url;
+    args.method =method;
+    args.version =version;
+    args.upload_data =upload_data;
+    args.upload_data_size =upload_data_size;
+    args.con_cls = con_cls;
 
-  response = route_func(args);
-  MHD_destroy_response(response);
-  return 1;
+    // Calling Route function
+    response = route_func(args);
+    MHD_destroy_response(response);
+    return 1;
 }
-
 
 int
 main (void)
 {
-  struct MHD_Daemon *daemon;
-  daemon = MHD_start_daemon (MHD_USE_AUTO | MHD_USE_INTERNAL_POLLING_THREAD, PORT, NULL, NULL,
-                             &answer_to_connection, NULL, MHD_OPTION_END);
-  if (NULL == daemon)
-    return 1;
+    struct MHD_Daemon *daemon;
+    daemon = MHD_start_daemon (MHD_USE_AUTO | MHD_USE_INTERNAL_POLLING_THREAD, PORT, NULL, NULL,
+                                &answer_to_connection, NULL, MHD_OPTION_END);
+    if (NULL == daemon)
+        return 1;
 
-  (void) getchar ();
+    (void) getchar ();
 
-  MHD_stop_daemon (daemon);
-  return 0;
+    MHD_stop_daemon (daemon);
+    return 0;
 }
 
 
