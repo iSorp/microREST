@@ -1,6 +1,4 @@
 #include <jansson.h>
-
-#include "urlparser.h"
 #include "routes.h"
 #include "auth.h"
 
@@ -182,8 +180,8 @@ post_threshold_by_id(struct route_args args){
 
 struct routes_map rtable[MAX_ROUTES] = {
     { &get_status,             "/" , "GET"},
-    { &user_basic_auth,        "/user/auth/" , "GET"},
-    { &get_all_data,           "/sensor/data/" , "GET"},
-    { &get_data_by_id,         "/sensor/data" , "GET"},
-    { &post_threshold_by_id,   "/sensor/threshold" , "POST"}
+    { &user_basic_auth,        "/user/auth/", "GET"},
+    { &get_all_data,           "/sensor/data/", "GET"},
+    { &get_data_by_id,         "/sensor/data/<id>", "GET"},
+    { &post_threshold_by_id,   "/sensor/threshold", "POST"}
 };
