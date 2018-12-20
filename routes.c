@@ -198,7 +198,7 @@ get_data_by_id(struct func_args args) {
     if (0 == verify_token(args)) return 1;
 
     // read id and validate
-    char *id = MHD_lookup_connection_value(args.connection, MHD_GET_ARGUMENT_KIND, "id");  
+    const char *id = MHD_lookup_connection_value(args.connection, MHD_GET_ARGUMENT_KIND, "id");  
     if (NULL== id || 0 == match(id, "[0-9a-zA-Z]+")) {
         return report_error(args, "invalid id", MHD_HTTP_BAD_REQUEST);
     }
@@ -235,8 +235,8 @@ post_threshold_by_id(struct func_args args){
     if (0 == verify_token(args)) return 1;
 
     // read the id, value and validate
-    char *id     = MHD_lookup_connection_value(args.connection, MHD_GET_ARGUMENT_KIND, "id");
-    char *value  = MHD_lookup_connection_value(args.connection, MHD_GET_ARGUMENT_KIND, "value");
+    const char *id     = MHD_lookup_connection_value(args.connection, MHD_GET_ARGUMENT_KIND, "id");
+    const char *value  = MHD_lookup_connection_value(args.connection, MHD_GET_ARGUMENT_KIND, "value");
     if (NULL== id || 0 == match(id, "[0-9a-zA-Z]+")) {
         return report_error(args, "invalid id", MHD_HTTP_BAD_REQUEST);
     }

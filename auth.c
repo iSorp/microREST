@@ -20,7 +20,7 @@ validate_token(char *token) {
   return strcmp(TOKEN, token);
 }
 
-char *
+const char *
 generate_token(){
     return TOKEN;
 }

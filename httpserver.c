@@ -9,6 +9,7 @@
 #include <winsock2.h>
 #endif
 
+#include <string.h>
 #include <zlib.h>
 #include <jansson.h>
 #include <microhttpd.h>
@@ -16,7 +17,6 @@
 
 
 #define PORT 8888
-
 
 /**
  * Calling a function depending on the given URL
@@ -48,26 +48,11 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
                       const char *version, const char *upload_data,
                       size_t *upload_data_size, void **con_cls)
 {
-    int ret = 0;
-    (void)cls;               /* Unused. Silent compiler warning. */
-    (void)url;               /* Unused. Silent compiler warning. */
-    (void)method;            /* Unused. Silent compiler warning. */
-    (void)version;           /* Unused. Silent compiler warning. */
-    (void)upload_data;       /* Unused. Silent compiler warning. */
-    (void)upload_data_size;  /* Unused. Silent compiler warning. */
-    (void)con_cls;           /* Unused. Silent compiler warning. */
-
-    struct func_args args;
-    args.connection = connection;
-    args.url = url;
-    args.method =method;
-    args.version =version;
-    args.upload_data =upload_data;
-    args.upload_data_size =upload_data_size;
-    args.con_cls = con_cls;
+    struct func_args args = {
+        connection, url, method, version, upload_data, upload_data_size, con_cls };
 
     // Calling Route function
-    ret = route_func(args);
+    int ret = route_func(args);
     return ret;
 }
 
