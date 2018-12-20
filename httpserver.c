@@ -12,53 +12,25 @@
 #include <zlib.h>
 #include <jansson.h>
 #include <microhttpd.h>
-
 #include "routes.h"
+
 
 #define PORT 8888
 
-struct key_value_args kvtable[10];
-
-
-/**
- * Responses an error message
- *
- * @param args 
- * @param message 
- * @param status_code
- * @return MHD_Response
- */
-struct MHD_Response *
-report_error (struct func_args args, const char *message, int status_code)
-{
-    struct MHD_Response * response;
-    json_t *j = json_pack("{s:s,s:s}", "status", "error", "message", message);
-    char *s = json_dumps(j , 0);
-
-    response = MHD_create_response_from_buffer(strlen(s) , (void *)s, MHD_RESPMEM_PERSISTENT);
-    MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, "application/json");
-    MHD_queue_response(args.connection , status_code, response);
-    return response;
-}
 
 /**
  * Calling a function depending on the given URL
  *
  * @param args 
- * @return MHD_Response
+ * @return #MHD_NO on error
  */
-struct MHD_Response *
+int
 route_func(struct func_args args){
     int i;
     for(i=0;i<MAX_ROUTES; i++){
-        if (0 == strcmp(rtable[i].url, args.url)) {
+        if (NULL != rtable[i].url && 0 == strcmp(rtable[i].url, args.url)) {
             if (0 == strcmp(rtable[i].method, args.method)) {
-                /*
-                    iterate key values
-                    kvtable->key = "test";
-                    kvtable->value = "1";
-                */
-                return rtable[i].fctptr(args, kvtable);
+                return rtable[i].fctptr(args);
             }
             else
                 return report_error(args, "Method not allowed", MHD_HTTP_METHOD_NOT_ALLOWED);
@@ -76,8 +48,7 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
                       const char *version, const char *upload_data,
                       size_t *upload_data_size, void **con_cls)
 {
-    struct MHD_Response *response;
-    int ret;
+    int ret = 0;
     (void)cls;               /* Unused. Silent compiler warning. */
     (void)url;               /* Unused. Silent compiler warning. */
     (void)method;            /* Unused. Silent compiler warning. */
@@ -96,9 +67,8 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
     args.con_cls = con_cls;
 
     // Calling Route function
-    response = route_func(args);
-    MHD_destroy_response(response);
-    return 1;
+    ret = route_func(args);
+    return ret;
 }
 
 int
