@@ -18,5 +18,12 @@ The code was testet on a Rasperry PI 3 and i2c interface for the sensores
 ### Libraries
 - lmicrohttpd
 - lz
+- log4c (compile with make AUTOMAKE=:)
 
 
+
+
+# Compile with i2c
+ifeq ($(STANDALONE),yes)
+        CPPFLAGS += -DSTANDALONE
+endif

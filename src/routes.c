@@ -1,31 +1,12 @@
 #include <jansson.h>
 #include <string.h>
-#include <regex.h>
-#include "routes.h"
+#include "urltools.h"
 #include "auth.h"
-
-
-/*
-* Regex matching function
-*
-* @param string 
-* @param pattern 
-* @return 1 if string matches
-*/
-int
-match(const char *string, char *pattern) {
-    int status;
-    regex_t re;
-    if (regcomp(&re, pattern, REG_EXTENDED|REG_NOSUB|REG_ICASE) != 0) {
-        return(0);     
-    }
-    status = regexec(&re, string, (size_t) 0, NULL, 0);
-    regfree(&re);
-    if (status != 0) {
-        return(0);   
-    }
-    return(1);
-}
+#include "util.h"
+//#ifndef NO_SENSOR
+    #include <bmp280_defs.h>
+    #include <bmp280i2c.h>
+//#endif
 
 /*
 * Responses an error message
@@ -36,7 +17,7 @@ match(const char *string, char *pattern) {
 * @return #MHD_NO on error
 */
 int
-report_error(struct func_args args, char *message, int status_code) {   
+report_error(struct func_args_t args, char *message, int status_code) {   
     json_t *j = json_pack("{s:s,s:s}", "status", "error", "message", message);
     char *s = json_dumps(j , 0);
     
@@ -58,7 +39,7 @@ report_error(struct func_args args, char *message, int status_code) {
 * @return 1 on valid token
 */
 int
-verify_token(struct func_args args) {
+verify_token(struct func_args_t args) {
     int status_code, valid = 1;
     json_t *j;
     char *s;
@@ -98,10 +79,11 @@ verify_token(struct func_args args) {
 * User basic authentication, returns a token.
 * route: /user/auth
 * @param args
+* @param params
 * @return #MHD_NO on error
 */
 int
-user_basic_auth(struct func_args args){
+user_basic_auth(struct func_args_t args, char **params){
     int status_code;
     json_t *j;
     const char *auth = MHD_lookup_connection_value(args.connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_AUTHORIZATION);
@@ -139,14 +121,16 @@ user_basic_auth(struct func_args args){
 * At / (root) the client can verify if the server responds to requests.
 * route: / (root)
 * @param args
+* @param params
 * @return #MHD_NO on error
 */
 int
-get_status(struct func_args args){
+get_status(struct func_args_t args, char **params){
     if (0 == verify_token(args)) return 1;
 
     json_t *j = json_pack("{s:s,s:s}", "status", "success", "message", "validation accepted");
     char *s = json_dumps(j , 0);
+    if (NULL == s) return report_error(args, "could not create json", MHD_HTTP_OK); 
 
     // make response
     int ret = 1;
@@ -160,21 +144,31 @@ get_status(struct func_args args){
 
 /*
 * This function returns all sensors data as a json string.
-* route: /sensor/data
+* route: /<chip>/data
 * @param args
+* @param params
 * @return #MHD_NO on error
 */
 int
-get_all_data(struct func_args args){
+get_sensor_data(struct func_args_t args, char **params){
     if (0 == verify_token(args)) return 1;
 
-    /*---> TODO here read the data <---*/
-    char *value1 = "1.123";
-    char *value2 = "1234";
+    // read id and validate
+    char *chip = params[0]; 
+    if (NULL== chip || 0 == match(chip, "[0-9a-zA-Z]+")) {
+        return report_error(args, "invalid chip id", MHD_HTTP_BAD_REQUEST);
+    }
 
-    json_t *jd = json_pack("{s:s,s:s}", "sensor 1", value1, "sensor 2", value2);
-    json_t *j = json_pack("{s:s,s:s,s:o}", "status", "success", "message", "returning data", "data", jd);
+    double temp=0, pres=0;
+#ifndef NO_SENSOR
+    temp = readTemperature();
+    pres = readPressure();
+#endif
+
+    json_t *jd = json_pack("{s:f,s:f}", "temperature", temp, "pressure", pres);
+    json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "chip", chip, "data", jd);
     char *s = json_dumps(j , 0);
+    if (NULL == s) return report_error(args, "could not create json", MHD_HTTP_OK); 
 
     // make response
     int ret = 1;
@@ -188,30 +182,40 @@ get_all_data(struct func_args args){
 
 /*
 * This function returns the data of a specified sensor as a json string.
-* route: /sensor/data/?id=123abc
+* route: /<chip>/<sensor>/data
 * @param args
 * @param kvtable
+* @param params
 * @return #MHD_NO on error
 */
 int
-get_data_by_id(struct func_args args) {
+get_data_by_sensor_id(struct func_args_t args, char **params) {
     if (0 == verify_token(args)) return 1;
 
     // read id and validate
-    const char *id = MHD_lookup_connection_value(args.connection, MHD_GET_ARGUMENT_KIND, "id");  
-    if (NULL== id || 0 == match(id, "[0-9a-zA-Z]+")) {
-        return report_error(args, "invalid id", MHD_HTTP_BAD_REQUEST);
-    }
+    char *chip = params[0]; 
+    char *sensor = params[1]; 
+    if (NULL== chip || 0 == match(chip, "[0-9a-zA-Z]+")) 
+        return report_error(args, "invalid chip id", MHD_HTTP_BAD_REQUEST);
+    if (NULL== sensor || 0 == match(sensor, "[0-9a-zA-Z]+"))
+        return report_error(args, "invalid sensor id", MHD_HTTP_BAD_REQUEST);
+    if (strcmp(chip, "bmp280") !=0)
+        return report_error(args, "invalid chip, currently only bmp280 is available", MHD_HTTP_OK); 
 
-    /*---> TODO here read the data <---*/
-    char *value = "1.123";
+    double value = 0;
+#ifndef NO_SENSOR
+    if (strcmp(sensor, "temperature")==0)
+        value = readTemperature();
+    else if (strcmp(sensor, "pressure")==0)
+        value = readPressure();
+    else
+        return report_error(args, "invalid sensor", MHD_HTTP_OK); 
+#endif
 
-    char buf[256];
-    snprintf(buf, sizeof buf, "%s%s", "sensor ", id);
-
-    json_t *jd = json_pack("{s:s}", buf, value);
-    json_t *j = json_pack("{s:s,s:s,s:o}", "status", "success", "message", "returning data", "data", jd);
+    json_t *jd = json_pack("{s:f}", sensor, value);
+    json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "chip", chip, "data", jd);
     char *s = json_dumps(j , 0);
+    if (NULL == s) return report_error(args, "could not create json", MHD_HTTP_OK); 
 
     // make response
     int ret = 1;
@@ -224,33 +228,91 @@ get_data_by_id(struct func_args args) {
 }
 
 /*
-* This function sets the threshold of a specified sensor.
-* route: /sensor/threshold/?id=123abc&value=123,123
+* This function sets the configuration of a specified chip. The mode ist transfered by an post body.
+* route: /<chip>/config
+* @param args
+* @param kvtable
+* @param params
+* @return #MHD_NO on error
+*/
+int
+post_chip_config(struct func_args_t args, char **params){
+    if (0 == verify_token(args)) return 1;
+
+    // read the id, value and validate
+    const char *chip = params[0];
+    if (NULL== chip || 0 == match(chip, "[0-9a-zA-Z]+"))
+        return report_error(args, "invalid id", MHD_HTTP_BAD_REQUEST);
+    if (strcmp(chip, "bmp280") !=0)
+        return report_error(args, "invalid chip, currently only bmp280 is available", MHD_HTTP_OK); 
+
+
+    // Process uploaded data
+    const char *data = args.upload_data;
+    // parse string
+    json_t *k = json_loads(data , 0, NULL);
+    json_t *jv = json_object_get(k, "config");
+    //if (1 != json_is_real(jv))
+    //    return report_error(args, "double value required", MHD_HTTP_BAD_REQUEST);
+    
+    char* value1 = json_string_value(json_object_get(jv, "value1"));
+    char* value2 = json_string_value(json_object_get(jv, "value2"));
+    char* value3 = json_string_value(json_object_get(jv, "value3"));
+
+#ifndef NO_SENSOR
+    // load configuration, modify and save
+    struct bmp280_config conf;
+    getConfiguration(&conf);
+    /*conf.dummy = 1;
+    conf.dummy = 2;
+    conf.dummy = 3;*/
+    setConfiguration(&conf);
+    if (setConfiguration(&conf))
+        return report_error(args, "configuration not changed", MHD_HTTP_OK); 
+#endif
+
+    json_t *j = json_pack("{s:s,s:s,s:s}", "status", "success", "message", "config saved", "chip", chip);
+    char *s = json_dumps(j , 0);
+
+    // make response
+    int ret = 1;
+    struct MHD_Response * response;
+    response = MHD_create_response_from_buffer(strlen(s) , (void *)s, MHD_RESPMEM_PERSISTENT);
+    ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, "application/json");
+    ret &= MHD_queue_response(args.connection , MHD_HTTP_OK, response);
+    MHD_destroy_response(response);
+    return ret;
+}
+
+/*
+* This function sets the mode of a specified chip. The mode ist transfered by an url parameter.
+* route: /<chip>/mode?modeid=someid
 * @param args
 * @param kvtable
 * @return #MHD_NO on error
 */
 int
-post_threshold_by_id(struct func_args args){
+post_chip_mode(struct func_args_t args, char **params){
     if (0 == verify_token(args)) return 1;
 
     // read the id, value and validate
-    const char *id     = MHD_lookup_connection_value(args.connection, MHD_GET_ARGUMENT_KIND, "id");
-    const char *value  = MHD_lookup_connection_value(args.connection, MHD_GET_ARGUMENT_KIND, "value");
-    if (NULL== id || 0 == match(id, "[0-9a-zA-Z]+")) {
-        return report_error(args, "invalid id", MHD_HTTP_BAD_REQUEST);
-    }
-    if (NULL== value || 0 == match(value, "^[0-9]+([.,][0-9]{1,9})?$")) {
-        return report_error(args, "decimal value required (#.#{0,9})", MHD_HTTP_BAD_REQUEST);
-    }
+    const char *chip = params[0];
+    const char *mode = MHD_lookup_connection_value(args.connection , MHD_GET_ARGUMENT_KIND, "power");
 
-    /*---> TODO here save the therhold <---*/
+    if (NULL== chip || 0 == match(chip, "[0-9a-zA-Z]+"))
+        return report_error(args, "invalid chip id", MHD_HTTP_BAD_REQUEST);
+    if (NULL== mode || 0 == match(mode, "[0-9a-zA-Z]+"))
+        return report_error(args, "invalid mode", MHD_HTTP_BAD_REQUEST);
+    if (strcmp(chip, "bmp280") !=0)
+        return report_error(args, "invalid chip, currently only bmp280 is available", MHD_HTTP_OK); 
 
-    char buf[256];
-    snprintf(buf, sizeof buf, "%s%s", "sensor ", id);
+#ifndef NO_SENSOR
+    if (setPowerMode(mode)!=0) 
+        return report_error(args, "mode selection failed", MHD_HTTP_OK); 
+#endif
 
-    json_t *jd = json_pack("{s:s}", buf, value);
-    json_t *j = json_pack("{s:s,s:s,s:o}", "status", "success", "message", "data stored", "data", jd);
+    json_t *jd = json_pack("{s:s}", "mode", mode);
+    json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "mode changed", "chip", chip, "data", jd);
     char *s = json_dumps(j , 0);
 
     // make response
@@ -266,10 +328,11 @@ post_threshold_by_id(struct func_args args){
 /*
 *   Route - Function map
 */
-struct routes_map rtable[MAX_ROUTES] = {
-    { &get_status,             "/",                     "GET"},
-    { &user_basic_auth,        "/user/auth/",           "GET"},
-    { &get_all_data,           "/sensor/data/",         "GET"},
-    { &get_data_by_id,         "/sensor/data",          "GET"},
-    { &post_threshold_by_id,   "/sensor/threshold",     "POST"}
+struct routes_map_t rtable[MAX_ROUTES] = {
+    { &get_status,             "/",                       "GET"},
+    { &user_basic_auth,        "/user/auth",              "GET"},
+    { &get_sensor_data,        "/<chip>/data",            "GET"},
+    { &get_data_by_sensor_id,  "/<chip>/<sensor>/data",   "GET"},
+    { &post_chip_config,       "/<chip>/config",          "POST"},
+    { &post_chip_mode,         "/<chip>/mode",            "POST"},
 };

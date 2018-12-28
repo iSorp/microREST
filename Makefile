@@ -1,19 +1,45 @@
-TARGET = httpserver
-LIBS = -lmicrohttpd -lz -ljansson
-INCLUDES = $(HOME)/Library/libmicrohttpd/include/
-LIBRARIES = $(HOME)/Library/libmicrohttpd/lib/
-SOURCES = routes.c  auth.c httpserver.c
-CC = gcc
-CFLAGS = -g -Wall
+# options
+LOGGER=no
+SENSOR=no
 
-default: build
-build:
-	$(CC) $(CFLAGS) -I$(INCLUDES) -L$(LIBRARIES) $(SOURCES) $(LIBS) -o $(TARGET)
+LIB_PATH 	= $(HOME)
+#/Library/libmicrohttpd
+SRC_DIR  	= src
+LIBS 	 	= -lmicrohttpd -lz -ljansson
+INCLUDES 	= -I$(LIB_PATH)/include/
+LIBRARIES	= -L$(LIB_PATH)/lib/
+OBJ_FILES 	= $(patsubst %.c, %.o, $(wildcard $(SRC_DIR)/*.c))
+TARGET 		= httpserver.out
+
+CFLAGS 		= -c -Wall
+LDFLAGS		= -g
+CC      	= gcc 
+LD      	= gcc
+
+ifeq ($(SENSOR),yes)
+	LIBS += -lbmp280
+else
+	CPPFLAGS += -DNO_SENSOR
+endif
+ifeq ($(LOGGER),yes)
+	LIBS += -llog4c
+else
+	CPPFLAGS += -DNO_LOGGER
+endif
+
+
+all: $(TARGET)
+
+$(TARGET) : $(OBJ_FILES)
+	$(LD) $(LDFLAGS) -o $@ $(OBJ_FILES) $(LIBRARIES) $(LIBS)
+
+$(OBJ_FILES): %.o: %.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(INCLUDES) $< -o $@
 
 clean :
-	rm httpserver
-	rm -R *.dSYM
+	rm -R *.out $(SRC_DIR)/*.o $(SRC_DIR)/*.a *.dSYM
 
 run:
-	./httpserver
-
+	export LD_LIBRARY_PATH=/home/pi/lib:/home/pi/log4c/lib
+	#export LD_LIBRARY_PATH=$(LIB_PATH)/lib
+	./httpserver.out
