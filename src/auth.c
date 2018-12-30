@@ -43,7 +43,7 @@ verify_token(struct MHD_Connection *connection) {
     char *s;
     const char *auth = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_AUTHORIZATION);
 
-    // check wheather Bearer token authentication header is found
+    // check whether bearer token authentication header is found
     if (auth == NULL || strstr(auth, "Bearer")==NULL) {
         j = json_pack("{s:s,s:s}", "status", "error", "message", "Please send valid bearer token");
         s = json_dumps(j , 0);
@@ -64,6 +64,8 @@ verify_token(struct MHD_Connection *connection) {
     if (0 == valid) {
         // make response
         buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
+        json_decref(j);
+        free(s);
     }
     else logger(INFO, "token verification ok");
     return valid;

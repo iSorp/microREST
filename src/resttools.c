@@ -44,7 +44,10 @@ report_error(struct MHD_Connection *connection, char *message, int status_code) 
     char *s = json_dumps(j , 0);
     
     // make response
-    return buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
+    int ret = buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
+    json_decref(j);
+    free(s);
+    return ret;
 }
 
 /**
