@@ -7,6 +7,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <math.h>
+
 #ifndef STANDALONE
     #include <linux/i2c-dev.h>
 #endif
@@ -33,9 +35,6 @@ SDI:	i2c Data line
 #define BMP280_READ_REG         4
 #define BMP280_READ_DATA        5
 
-// altitude above sea level
-#define ALTITUDE 500
-#define I2CADDR 0x77
 #define REG_ADDR_SIZE 2
 
  // devicehandle
@@ -47,6 +46,7 @@ static char *BUS = "/dev/i2c-1";
 // Meassuring duration time
 static uint8_t meas_dur;
 
+int altitude = 500;
 
 /********************** Static function declarations ************************/
 
@@ -83,11 +83,26 @@ readPressure() {
     struct bmp280_uncomp_data ucomp_data;
 	bmp280.delay_ms(meas_dur); /* Measurement time */
 	bmp280_get_uncomp_data(&ucomp_data, &bmp280);
-	return bmp280_comp_pres_double(ucomp_data.uncomp_press, &bmp280);
+
+    double pressure = bmp280_comp_pres_double(ucomp_data.uncomp_press, &bmp280);
+    double pressure_nn = pressure/pow(1 - altitude/44330.0, 5.255);
+	return pressure_nn;
+}
+
+int 
+softReset() {
+    // Reset
+	int8_t rslt = bmp280_soft_reset(&bmp280);
+    if (rslt != BMP280_OK){
+        printf("Unable to force reset %i\n", rslt);
+        return rslt;
+	}
+    return 0;
 }
 
 int 
 setPowerMode(int8_t mode) {
+
     // Set normal power mode
 	int8_t rslt = bmp280_set_power_mode(mode, &bmp280);
     if (rslt != BMP280_OK){
@@ -137,9 +152,10 @@ initBmc280() {
     struct bmp280_config conf;
     getConfiguration(&conf);
 
+
 	conf.filter = BMP280_FILTER_COEFF_2;
 	conf.os_pres = BMP280_OS_16X;
-	conf.os_temp = BMP280_OS_4X;
+	conf.os_temp = BMP280_OS_4X; 
 	conf.odr = BMP280_ODR_1000_MS;
     rslt = setConfiguration(&conf);
 

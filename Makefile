@@ -1,11 +1,9 @@
 # options
-LOGGER=no
 SENSOR=no
 
-LIB_PATH 	= $(HOME)
-#/Library/libmicrohttpd
+LIB_PATH 	= $(HOME)/Library/libmicrohttpd
 SRC_DIR  	= src
-LIBS 	 	= -lmicrohttpd -lz -ljansson
+LIBS 	 	= -lmicrohttpd -lz -ljansson -lm
 INCLUDES 	= -I$(LIB_PATH)/include/
 LIBRARIES	= -L$(LIB_PATH)/lib/
 OBJ_FILES 	= $(patsubst %.c, %.o, $(wildcard $(SRC_DIR)/*.c))
@@ -21,11 +19,8 @@ ifeq ($(SENSOR),yes)
 else
 	CPPFLAGS += -DNO_SENSOR
 endif
-ifeq ($(LOGGER),yes)
-	LIBS += -llog4c
-else
-	CPPFLAGS += -DNO_LOGGER
-endif
+
+export LD_LIBRARY_PATH=$(LIB_PATH)/lib
 
 
 all: $(TARGET)
@@ -40,6 +35,4 @@ clean :
 	rm -R *.out $(SRC_DIR)/*.o $(SRC_DIR)/*.a *.dSYM
 
 run:
-	export LD_LIBRARY_PATH=/home/pi/lib:/home/pi/log4c/lib
-	#export LD_LIBRARY_PATH=$(LIB_PATH)/lib
 	./httpserver.out

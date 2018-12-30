@@ -1,8 +1,10 @@
-int 
-validate_user(char *user , char *pass);
+#include "resttools.h"
 
-int 
-validate_token(char *token);
-
-char *
+const char *
 generate_token();
+
+int 
+validate_user (char *user , char *pass);
+
+int
+verify_token(struct MHD_Connection *connection);

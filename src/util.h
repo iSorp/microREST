@@ -1,3 +1,22 @@
+
+/*
+* Logging types
+*/
+enum tag_e {
+    ERROR,
+    WARNING,
+    INFO
+};
+
+/*
+* Simple logger for printing a message
+*
+* @param tag 
+* @param message 
+*/
+void 
+logger(enum tag_e tag, const char *message);
+
 /*
 * Regex matching function
 *
