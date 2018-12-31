@@ -46,7 +46,6 @@ verify_token(struct MHD_Connection *connection) {
     // check whether bearer token authentication header is found
     if (auth == NULL || strstr(auth, "Bearer")==NULL) {
         j = json_pack("{s:s,s:s}", "status", "error", "message", "Please send valid bearer token");
-        s = json_dumps(j , 0);
         status_code = MHD_HTTP_UNAUTHORIZED;
         valid = 0;
     }
@@ -55,7 +54,6 @@ verify_token(struct MHD_Connection *connection) {
         token = token +1;
         if (0 != validate_token(token)) {
             j = json_pack("{s:s,s:s}", "status", "error", "message", "Unauthorized access");
-            s = json_dumps(j , 0);
             status_code = MHD_HTTP_UNAUTHORIZED;
             valid = 0;
         }
@@ -63,8 +61,9 @@ verify_token(struct MHD_Connection *connection) {
 
     if (0 == valid) {
         // make response
-        buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
+        s = json_dumps(j , 0);
         json_decref(j);
+        buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
         free(s);
     }
     else logger(INFO, "token verification ok");

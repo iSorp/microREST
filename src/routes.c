@@ -44,15 +44,15 @@ struct routes_map_t rtable[MAX_ROUTES] = {
 */
 static int
 get_status(struct func_args_t args) {
-    //if (0 == verify_token(args.connection)) return 1;
+    if (0 == verify_token(args.connection)) return 1;
 
     json_t *j = json_pack("{s:s,s:s}", "status", "success", "message", "validation accepted");
     char *s = json_dumps(j , 0);
+    json_decref(j);
     if (NULL == s) return report_error(args.connection, "could not create json", MHD_HTTP_OK); 
   
     // make response
     int ret = buffer_queue_response_ok(args.connection, s, JSON_CONTENT_TYPE);
-    json_decref(j);
     free(s);
     return ret;
 }
@@ -91,10 +91,10 @@ user_basic_auth(struct func_args_t args) {
     }
 
     char *s = json_dumps(j , 0);
+    json_decref(j);
 
     // make response
     int ret = buffer_queue_response(args.connection, s, JSON_CONTENT_TYPE, status_code);
-    json_decref(j);
     free(s);
     return ret;
 }
@@ -124,11 +124,11 @@ get_sensor_data(struct func_args_t args) {
     json_t *jd = json_pack("{s:f,s:f}", "temperature", temp, "pressure", pres);
     json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "board", board, "data", jd);
     char *s = json_dumps(j , 0);
+    json_decref(j);
     if (NULL == s) return report_error(args.connection, "could not create json", MHD_HTTP_OK); 
 
     // make response
     int ret = buffer_queue_response_ok(args.connection, s, JSON_CONTENT_TYPE);
-    json_decref(j);
     free(s);
     return ret;
 }
@@ -187,6 +187,7 @@ get_data_by_sensor_id(struct func_args_t args) {
     json_t *jd = json_pack("{s:f}", sensor, value);
     json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "board", board, "data", jd);
     char *s = json_dumps(j , 0);
+    json_decref(j);
     if (NULL == s) return report_error(args.connection, "could not create json", MHD_HTTP_OK); 
 
     //clock_start = clock();
@@ -199,7 +200,6 @@ get_data_by_sensor_id(struct func_args_t args) {
     ret &= MHD_queue_response(args.connection, MHD_HTTP_OK, response);
     MHD_destroy_response(response);*/
     int ret = buffer_queue_response_ok(args.connection, s, JSON_CONTENT_TYPE);
-    json_decref(j);
     free(s);
     return ret;
 }
@@ -223,15 +223,31 @@ update_board_config(struct func_args_t args) {
     if (args.upload_data == NULL)
         return report_error(args.connection, "invalid payoad", MHD_HTTP_OK); 
 
-    // Process uploaded data
-    const char *data = args.upload_data;
     // parse string
-    json_t *k = json_loads(data , 0, NULL);
-    int8_t os_temp = *json_string_value(json_object_get(k, "os_temp"));
-    int8_t os_pres = *json_string_value(json_object_get(k, "os_pres"));
-    int8_t odr = *json_string_value(json_object_get(k, "odr"));
-    int8_t filter = *json_string_value(json_object_get(k, "filter"));
-    int altitude = *json_string_value(json_object_get(k, "altitude"));
+    json_t *k = json_loads(args.upload_data , 0, NULL);
+ 
+    json_t *j1 = json_object_get(k, "os_temp");
+    json_t *j2 = json_object_get(k, "os_pres");
+    json_t *j3 = json_object_get(k, "odr");
+    json_t *j4 = json_object_get(k, "filter");
+    json_t *j5 = json_object_get(k, "altitude");
+   
+
+    // Validate json
+    if (1 != json_is_integer(j1) || 1 != json_is_integer(j2) || 1 != json_is_integer(j3) || 1 != json_is_integer(j4), 1 != json_is_integer(j5)) {
+        json_decref(k);
+        return report_error(args.connection, "int value required", MHD_HTTP_BAD_REQUEST);
+    }
+        
+    // Process uploaded data
+    int8_t os_temp = json_integer_value(j1);
+    int8_t os_pres = json_integer_value(j2);
+    int8_t odr = json_integer_value(j3);
+    int8_t filter = json_integer_value(j4);
+    int altitude = json_integer_value(j5);
+
+    // drop the object reference
+    json_decref(k);
 
 #ifndef NO_SENSOR
     // load configuration, modify and save
@@ -250,11 +266,10 @@ update_board_config(struct func_args_t args) {
 
     json_t *j = json_pack("{s:s,s:s,s:s}", "status", "success", "message", "config saved", "board", board);
     char *s = json_dumps(j , 0);
+    json_decref(j);
 
     // make response
     int ret = buffer_queue_response_ok(args.connection, s, JSON_CONTENT_TYPE);
-    json_decref(k);
-    json_decref(j);
     free(s);
     return ret;
 }
@@ -291,10 +306,10 @@ set_board_action(struct func_args_t args) {
     json_t *jd = json_pack("{s:s}", "action", action);
     json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "action set", "board", board, "data", jd);
     char *s = json_dumps(j , 0);
+    json_decref(j);
 
     // make response
     int ret = buffer_queue_response_ok(args.connection, s, JSON_CONTENT_TYPE);
-    json_decref(j);
     free(s);
     return ret;
 }
@@ -328,10 +343,10 @@ set_board_mode(struct func_args_t args) {
     json_t *jd = json_pack("{s:s}", "mode", mode);
     json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "mode set", "board", board, "data", jd);
     char *s = json_dumps(j , 0);
+    json_decref(j);
 
     // make response
-    int ret = buffer_queue_response_ok(args.connection, s, JSON_CONTENT_TYPE);
-    json_decref(j);
+    int ret = buffer_queue_response_ok(args.connection, s, JSON_CONTENT_TYPE);;
     free(s);
     return ret;
 }

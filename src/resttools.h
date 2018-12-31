@@ -6,7 +6,7 @@
 #define MAX_ROUTES 20
 #define MAX_ROUTE_PARTS 20
 #define MAX_ROUTE_PARAM 10
-#define MAX_URL_SIZE 255
+#define MAX_URL_SIZE 256
 #define MAX_PAYLOAD 1024
 #define JSON_CONTENT_TYPE "application/json"
 
@@ -43,7 +43,7 @@ struct routes_map_t rtable[MAX_ROUTES];
 */
 struct con_info_t
 {
-    const char *data;
+    char *data ;
     int routes_map_index;
 };
 
@@ -61,13 +61,12 @@ int
 get_route_values(const char **values, char* url, const char *pattern);
 
 /**
- * Gets the index of the route map depending on a url
- *
- * @param url 
- * @return -1 on error
- */
+* Returns the index of the route table on which the url_pattern matches a given url.
+* @param url 
+* @return -1 on error
+*/
 int
-route_map_index (const char *url);
+route_table_index (const char *url);
 
 /**
 * Creates Rexgex Patters for all URL. The URL are allocated in new memory locations.

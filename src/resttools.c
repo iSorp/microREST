@@ -16,9 +16,9 @@
 */
 int 
 buffer_queue_response(struct MHD_Connection *connection, char *message, char *content_type, int status_code) {
-    int ret = 1, code;
+    int ret = 1;
     struct MHD_Response * response;
-    response = MHD_create_response_from_buffer(strlen(message) , (void *)message, MHD_RESPMEM_MUST_COPY);
+    response = MHD_create_response_from_buffer(strlen(message) , (void *)message, MHD_RESPMEM_PERSISTENT);
     ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, content_type);
     ret &= MHD_queue_response(connection , status_code, response);
     MHD_destroy_response(response);
@@ -42,10 +42,9 @@ report_error(struct MHD_Connection *connection, char *message, int status_code) 
     logger(ERROR, message);
     json_t *j = json_pack("{s:s,s:s}", "status", "error", "message", message);
     char *s = json_dumps(j , 0);
-    
+     json_decref(j);
     // make response
     int ret = buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
-    json_decref(j);
     free(s);
     return ret;
 }
@@ -95,7 +94,7 @@ split_url(char **parts, char *url, int *trailing_slash) {
 int
 get_route_values(const char **values, char* url, const char *pattern) {
    
-    int i, index =0;
+    int index =0;
     while (*pattern != '\0') {
         if (index >= MAX_ROUTE_PARAM) return -1; // on error
 
@@ -120,13 +119,12 @@ get_route_values(const char **values, char* url, const char *pattern) {
 }
 
 /**
- * Calling a function depending on the given URL
- *
- * @param args 
- * @return #MHD_NO on error
- */
+* Returns the index of the route table on which the url_pattern matches a given url.
+* @param url 
+* @return -1 on error
+*/
 int
-route_map_index (const char *url) {
+route_table_index(const char *url) {
     int i;
     for(i=0;i<MAX_ROUTES; i++){
         if (NULL != rtable[i].url_pattern && 1 == match(url, rtable[i].url_regex)) {
