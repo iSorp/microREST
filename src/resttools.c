@@ -70,7 +70,6 @@ split_url(char **parts, char *url, int *trailing_slash) {
 
     token = strtok(url, delim);
     if (token != NULL) {
-        memset(&parts[0], 0, sizeof(parts));
         parts[index++] = token;
         while (token != NULL) { 
             token = strtok(NULL, delim); 

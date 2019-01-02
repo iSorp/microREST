@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <bmp280_defs.h>
 
 int
 initI2C();

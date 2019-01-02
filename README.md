@@ -71,6 +71,12 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 ?action=reset
 ```
 
+#### Timespan
+Some routes support long polling get requests (only for HTTP 1.1)
+```
+?timespan=integer value
+```
+
 ## Siege test
 ```
 siege -H 'Content-Type: application/json'  'http://localhost:8888/board/bmp280/config PATCH {"os_temp":1,"os_pres":1,"odr":5,"filter":1,"altitude":500}' 

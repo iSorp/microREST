@@ -7,7 +7,7 @@
 #define MAX_ROUTE_PARTS 20
 #define MAX_ROUTE_PARAM 10
 #define MAX_URL_SIZE 256
-#define MAX_PAYLOAD 1024
+#define MAX_PAYLOAD 256
 #define JSON_CONTENT_TYPE "application/json"
 
 /**
@@ -17,35 +17,33 @@ struct func_args_t {
     struct MHD_Connection *connection;
     const char *url;
     const char *method;
+    const char *version;
     const char *upload_data;
     const char **route_values;
+};
+
+enum auth_e {
+    NO_AUTH,
+    AUTH
 };
 
 /*
 * REST function type definition
 */
 typedef int 
-(*fctptr)(struct func_args_t);
+(*fctptr)(struct func_args_t*);
 
 /**
  * Structure containing route functions
  */
 struct routes_map_t {
     fctptr rest_func; 
-    char *url_pattern;
-    char *method;
-    char *url_regex;
+    enum auth_e auth_type;
+    const char *method;
+    const char *url_pattern;
+    const char *url_regex;
 };
 struct routes_map_t rtable[MAX_ROUTES];
-
-/*
-* Structure to persist data for http hansshakes 
-*/
-struct con_info_t
-{
-    char *data ;
-    int routes_map_index;
-};
 
 /**
 * The function finds values in a url defined by the url pattern.

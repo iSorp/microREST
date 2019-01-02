@@ -4,6 +4,7 @@
 
 #include "util.h"
 #include "auth.h"
+#include "resttools.h"
 
 const char *USER = "admin";
 const char *PASSWORD = "1234";
@@ -33,21 +34,22 @@ validate_user (char *user , char *pass) {
 * Token validation 
 *
 * @param connection
-* @param ret resutl of verifing
-* @return 1 on valid token
+* @param status resutl of verifing
+* @return #MHD_NO on error
 */
 int
-verify_token(struct MHD_Connection *connection) {
-    int status_code, valid = 1;
+verify_token(struct MHD_Connection *connection, int *status) {
+    int status_code, ret = 1;
     json_t *j;
     char *s;
+    *status = 1;
     const char *auth = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_AUTHORIZATION);
 
     // check whether bearer token authentication header is found
     if (auth == NULL || strstr(auth, "Bearer")==NULL) {
         j = json_pack("{s:s,s:s}", "status", "error", "message", "Please send valid bearer token");
         status_code = MHD_HTTP_UNAUTHORIZED;
-        valid = 0;
+        *status = 0;
     }
     else {
         char *token = strchr(auth, ' ');
@@ -55,17 +57,17 @@ verify_token(struct MHD_Connection *connection) {
         if (0 != validate_token(token)) {
             j = json_pack("{s:s,s:s}", "status", "error", "message", "Unauthorized access");
             status_code = MHD_HTTP_UNAUTHORIZED;
-            valid = 0;
+            *status = 0;
         }
     }
 
-    if (0 == valid) {
+    if (0 == *status) {
         // make response
         s = json_dumps(j , 0);
         json_decref(j);
-        buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
+        ret = buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
         free(s);
     }
     else logger(INFO, "token verification ok");
-    return valid;
+    return ret;
 }
