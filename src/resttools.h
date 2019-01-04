@@ -82,9 +82,9 @@ regexify_routes();
 * @return #MHD_NO on error
 */
 int 
-buffer_queue_response(struct MHD_Connection *connection, char *message, char *content_type, int status_code);
+buffer_queue_response(struct MHD_Connection *connection, const char *message, char *content_type, int status_code);
 int 
-buffer_queue_response_ok(struct MHD_Connection *connection, char *message, char *content_type);
+buffer_queue_response_ok(struct MHD_Connection *connection, const char *message, char *content_type);
 
 /*
 * Responses an error message
@@ -95,4 +95,4 @@ buffer_queue_response_ok(struct MHD_Connection *connection, char *message, char 
 * @return #MHD_NO on error
 */
 int
-report_error(struct MHD_Connection *connection, char *message, int status_code);
+report_error(struct MHD_Connection *connection, const char *message, int status_code);

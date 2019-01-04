@@ -15,7 +15,8 @@
 * @return #MHD_NO on error
 */
 int 
-buffer_queue_response(struct MHD_Connection *connection, char *message, char *content_type, int status_code) {
+buffer_queue_response(struct MHD_Connection *connection, const char *message, char *content_type, int status_code) {
+    // make response
     int ret = 1;
     struct MHD_Response * response;
     response = MHD_create_response_from_buffer(strlen(message) , (void *)message, MHD_RESPMEM_PERSISTENT);
@@ -25,7 +26,7 @@ buffer_queue_response(struct MHD_Connection *connection, char *message, char *co
     return ret;
 }
 int 
-buffer_queue_response_ok(struct MHD_Connection *connection, char *message, char *content_type) {
+buffer_queue_response_ok(struct MHD_Connection *connection, const char *message, char *content_type) {
     return buffer_queue_response(connection, message, content_type, MHD_HTTP_OK);
 }
 
@@ -38,14 +39,20 @@ buffer_queue_response_ok(struct MHD_Connection *connection, char *message, char 
 * @return #MHD_NO on error
 */
 int
-report_error(struct MHD_Connection *connection, char *message, int status_code) {   
-    logger(ERROR, message);
-    json_t *j = json_pack("{s:s,s:s}", "status", "error", "message", message);
-    char *s = json_dumps(j , 0);
-     json_decref(j);
+report_error(struct MHD_Connection *connection, const char *msg, int status_code) {   
+    logger(ERROR, msg);
+    json_t *j_object = json_pack("{s:s,s:s}", "status", "error", "message", msg);
+    char *message = json_dumps(j_object , 0);
+    json_decref(j_object);
+
     // make response
-    int ret = buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
-    free(s);
+    int ret = 1;
+    struct MHD_Response * response;
+    response = MHD_create_response_from_buffer(strlen(message) , (void *)message, MHD_RESPMEM_PERSISTENT);
+    ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, JSON_CONTENT_TYPE);
+    ret &= MHD_queue_response(connection, status_code, response);
+    MHD_destroy_response(response);
+    free(message);
     return ret;
 }
 
@@ -134,7 +141,7 @@ route_table_index(const char *url) {
 }
 
 /**
-* Creates rexgex patterns for all routes. The regex patterns are allocated in new memory allocations.
+* Creates regex patterns for all routes. The regex patterns are allocated in new memory allocations.
 * This Function has to be called only ONCE.
 */
 void

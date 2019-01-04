@@ -6,6 +6,11 @@ The service provides functions to read sensor data and write configurations.
 ### Supported Emvoirments
 The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 
+### Supported Authentication
+- Basic
+- Digest
+- Bearer
+
 ### Sensors 
 - Humidity
 - Air pressure
@@ -15,8 +20,6 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 - lz
 - lm
 - lbmp280
-
-
 
 ### Routes
 
@@ -76,8 +79,16 @@ Some routes support long polling get requests (only for HTTP 1.1)
 ```
 ?timespan=integer value
 ```
+Example: 
+/board/bmp280/sensor/temperature/data?timespan=10
 
-## Siege test
+## Examples
+```
+curl -X PATCH --digest -u admin:1234 --data '{"os_temp":1,"os_pres":1,"odr":5,"filter":1,"altitude":500}'  http://localhost:8888/board/bmp280/config
+```
+
+
+## Tests
 ```
 siege -H 'Content-Type: application/json'  'http://localhost:8888/board/bmp280/config PATCH {"os_temp":1,"os_pres":1,"odr":5,"filter":1,"altitude":500}' 
 ```
@@ -96,4 +107,45 @@ Successful transactions:       67706
 Failed transactions:	           0
 Longest transaction:	        0.64
 Shortest transaction:	        0.01
+```
+
+```
+ab -c 8 -n 1000 http://localhost:8888/
+```
+```
+Server Software:        
+Server Hostname:        localhost
+Server Port:            8888
+
+Document Path:          /
+Document Length:        182 bytes
+
+Concurrency Level:      8
+Time taken for tests:   1.909 seconds
+Complete requests:      1000
+Failed requests:        0
+Total transferred:      291000 bytes
+HTML transferred:       182000 bytes
+Requests per second:    523.96 [#/sec] (mean)
+Time per request:       15.268 [ms] (mean)
+Time per request:       1.909 [ms] (mean, across all concurrent requests)
+Transfer rate:          148.90 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.3      0       2
+Processing:     0   15  23.0      2      78
+Waiting:        0   13  22.2      2      76
+Total:          1   15  23.0      3      78
+
+Percentage of the requests served within a certain time (ms)
+  50%      3
+  66%      3
+  75%     16
+  80%     54
+  90%     56
+  95%     61
+  98%     66
+  99%     66
+ 100%     78 (longest request)
 ```

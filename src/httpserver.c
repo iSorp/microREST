@@ -12,7 +12,6 @@
     #include <bmp280i2c.h>
 #endif
 
-#define USER_AUTH
 #define PORT 8888
 
 /*
@@ -56,13 +55,16 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
                       size_t *upload_data_size, void **con_cls)
 {
     // TODO
-    // Bei einem Error während dem upload wird der Request nicht beendet (client). Beispiel error   user auth.
+    // Bei einem Error während dem upload wird der Request nicht beendet (client). Beispiel error bei failed user auth.
 
     // Prepare connection info
     if (NULL == *con_cls) {
         logger(INFO, "client request");
         logger(INFO, url);
+
         struct con_info_t *con_info = (struct con_info_t*)malloc(sizeof(struct con_info_t));     
+        // Save connection info for continue
+        *con_cls = (void *)con_info;
         con_info->data = NULL;
         con_info->data_size = 0;
         con_info->current_data_size = 0;
@@ -83,29 +85,24 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
         const char *cl = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_LENGTH);
         if (NULL != cl) {
             if (atoi(cl) > MAX_PAYLOAD)
-                return report_error(connection, "max payload 1024", MHD_HTTP_EXPECTATION_FAILED);
+                return report_error(connection, "max payload 1024", MHD_HTTP_PAYLOAD_TOO_LARGE);
             else
                 con_info->data_size = atoi(cl);
         }
 
         // user authentication
-    #ifdef USER_AUTH
         if (AUTH == rtable[con_info->routes_map_index].auth_type) {
-            int valid, ret;
-            ret = verify_token(connection, &valid);
-            if (!valid){
-                return ret;
+            int valid = 1, res = 0;
+            res = user_auth(connection, &valid);
+            if (valid == 0) {
+                return res;
             }
         }
-    #endif
-
-        // Save connection info for continue
-        *con_cls = (void *)con_info;
 
         // Continue (100) if message contains a payload
         if (NULL != cl && atoi(cl) > 0){
             return MHD_YES;
-        }  
+        } 
     }
 
     // prepare for data upload 
@@ -119,7 +116,8 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
         // Check actual data size
         if (con_info->current_data_size + *upload_data_size > con_info->data_size)
             return report_error(connection, "max payload 1024", MHD_HTTP_PAYLOAD_TOO_LARGE);
-        // Copy data
+        
+        // Copy data to the connection info object
         memcpy(con_info->data + con_info->current_data_size, upload_data, *upload_data_size);
         con_info->current_data_size += *upload_data_size;
         *upload_data_size = 0;
@@ -128,8 +126,9 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
         return MHD_YES;
     }
 
-
     // Search for route parameters
+    // TODO: 
+    // error MHD_HTTP_URI_TOO_LONG
     const char *route_values[MAX_ROUTE_PARAM] = {0};
     char val_buf[MAX_URL_SIZE] = {0};
     snprintf(val_buf, sizeof(val_buf), "%s%s", val_buf, url);
@@ -137,8 +136,7 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
     
     // REST function call
     struct func_args_t args = { connection, url, method, version, con_info->data, route_values };
-    int ret = rtable[con_info->routes_map_index].rest_func(&args);
-    return ret;
+    return rtable[con_info->routes_map_index].rest_func(&args);
 }
 
 int
@@ -157,7 +155,7 @@ main (void)
 
     logger(INFO, "run server");
     struct MHD_Daemon *daemon;
-    daemon = MHD_start_daemon (MHD_USE_AUTO | MHD_USE_THREAD_PER_CONNECTION, PORT, NULL, NULL,
+    daemon = MHD_start_daemon (MHD_USE_TURBO | MHD_USE_AUTO | MHD_USE_INTERNAL_POLLING_THREAD, PORT, NULL, NULL,
                                 &answer_to_connection, NULL,
                                 MHD_OPTION_NOTIFY_COMPLETED, request_completed,
                                 NULL, MHD_OPTION_END);

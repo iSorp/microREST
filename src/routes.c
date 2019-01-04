@@ -1,6 +1,7 @@
 #include <string.h>
 #include <jansson.h>
 #include <time.h>
+#include <pthread.h>
 #ifndef NO_SENSOR
     #include <bmp280_defs.h>
     #include <bmp280i2c.h>
@@ -11,8 +12,15 @@
 #include "resttools.h"
 
 /********************** Static function declarations ************************/
-static int get_status(struct func_args_t *args);
-static int user_basic_auth(struct func_args_t *args);
+int get_status(struct func_args_t *args);
+static int get_user_auth(struct func_args_t *args);
+//static int add_user(struct func_args_t *args);
+//static int update_user_by_id(struct func_args_t *args);
+//static int delete_user_by_id(struct func_args_t *args);
+//static int get_users(struct func_args_t *args);
+//static int get_user_by_id(struct func_args_t *args);
+//static int get_boards(struct func_args_t *args);
+//static int get_sensors(struct func_args_t *args);
 static int get_sensor_data(struct func_args_t *args);
 static int get_data_by_sensor_id(struct func_args_t *args); 
 static int update_board_config(struct func_args_t *args);
@@ -21,16 +29,23 @@ static int set_board_mode(struct func_args_t *args);
 
 
 /********************** Route - Function map ************************/
-// Parameter are defined by using {}
+// Parameter are defined by {id} {param} usw..
 
 struct routes_map_t rtable[MAX_ROUTES] = {
-    { &get_status,              NO_AUTH,    "GET"  , "/"},
-    { &user_basic_auth,         NO_AUTH,    "GET"  , "/user/auth"},
-    { &get_sensor_data,         AUTH   ,    "GET"  , "/board/{id}/sensor/data"},
-    { &get_data_by_sensor_id,   AUTH   ,    "GET"  , "/board/{id}/sensor/{sensor}/data"},
-    { &update_board_config,     AUTH   ,    "PATCH", "/board/{id}/config"},
-    { &set_board_action,        AUTH   ,    "PUT"  , "/board/{id}/action"},
-    { &set_board_mode,          AUTH   ,    "PUT"  , "/board/{id}/mode"},
+    { &get_status,              NO_AUTH,    "GET",      "/"},
+    { &get_user_auth,           AUTH,       "GET",      "/user/auth"},
+    //{ &add_user,                AUTH,       "POST",     "/user/"},
+    //{ &update_user_by_id,       AUTH,       "PATCH",    "/user/{id}"},
+    //{ &delete_user_by_id,       AUTH,       "DELETE",   "/user/{id}"},
+    //{ &get_users,               AUTH,       "GET",      "/user/"},
+    //{ &get_user_by_id,          AUTH,       "GET",      "/user/{id}"},
+    //{ &get_boards,              NO_AUTH,    "GET",      "/board/"},
+    //{ &get_sensors,             NO_AUTH,    "GET",      "/board/{id}/sensor/"},
+    { &get_sensor_data,         NO_AUTH,    "GET",      "/board/{id}/sensor/data"},
+    { &get_data_by_sensor_id,   NO_AUTH,    "GET",      "/board/{id}/sensor/{sensor}/data"},
+    { &update_board_config,     AUTH,       "PATCH",    "/board/{id}/config"},
+    { &set_board_action,        AUTH,       "PUT",      "/board/{id}/action"},
+    { &set_board_mode,          AUTH,       "PUT",      "/board/{id}/mode"},
 };
 
 /****************** Static Function Definitions *******************************/
@@ -42,65 +57,48 @@ struct routes_map_t rtable[MAX_ROUTES] = {
 * @param params
 * @return #MHD_NO on error
 */
-static int
+int
 get_status(struct func_args_t *args) {
-    // user authentication 
-    int valid, ret;
-    ret = verify_token(args->connection, &valid);
-    if (!valid){
-        return ret;
+    int ret = 1;
+ 
+    // create resource list
+    json_t *resources = json_array();
+    int i =0;
+    while (rtable[i].rest_func != NULL){
+        json_array_append_new(resources, json_string(rtable[i].url_pattern));  
+        ++i;
     }
-
-    json_t *j = json_pack("{s:s,s:s}", "status", "success", "message", "validation accepted");
-    char *s = json_dumps(j , 0);
-    json_decref(j);
-    if (NULL == s) return report_error(args->connection, "could not create json", MHD_HTTP_OK); 
+    
+    json_t *j_object = json_pack("{s:s,s:o}", "status", "success", "resources", resources);
+    char *message = json_dumps(j_object , 0);
+    json_decref(j_object);
+    
+    if (NULL == message) return report_error(args->connection, "could not create json object", MHD_HTTP_INTERNAL_SERVER_ERROR); 
   
     // make response
-    ret = buffer_queue_response_ok(args->connection, s, JSON_CONTENT_TYPE);
-    free(s);
+    ret = buffer_queue_response_ok(args->connection, message, JSON_CONTENT_TYPE);
+    free(message);
     return ret;
 }
 
-
 /*
-* User basic authentication, returns a token.
+* User authentication, returns a token.
 * route: /user/auth
 * @param args
 * @return #MHD_NO on error
 */
 static int
-user_basic_auth(struct func_args_t *args) {
-    int status_code;
-    json_t *j;
-    const char *auth = MHD_lookup_connection_value(args->connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_AUTHORIZATION);
+get_user_auth(struct func_args_t *args) {
 
-    // check whether basic authentication header is found
-    if (auth == NULL || strstr(auth, "Basic")==NULL) {
-        j = json_pack("{s:s,s:s}", "status", "error", "message", "basic authentication required");
-        status_code = MHD_HTTP_UNAUTHORIZED;
-        logger(WARNING, "basic authentication required");
-    } else {
-        char *pass = NULL; 
-        char *user = MHD_basic_auth_get_username_password (args->connection , &pass);
-        if (0 == validate_user(user, pass)) {
-            j = json_pack("{s:s,s:s,s:s}", "status", "success", "message", "user authenticated, returning token", "token", generate_token());
-            status_code = MHD_HTTP_OK;
-            logger(INFO, "basic auth ok");
-        }
-        else {
-            j = json_pack("{s:s,s:s}", "status", "error", "message", "wrong password");
-            status_code = MHD_HTTP_UNAUTHORIZED;
-            logger(WARNING, "wrong password");
-        }
-    }
-
-    char *s = json_dumps(j , 0);
-    json_decref(j);
+    const char *token = generate_token();
+    json_t *j_object = json_pack("{s:s,s:s,s:s}", "status", "success", "message", "user authenticated, returning token", "token", token);
+    char *message = json_dumps(j_object , 0);
+    json_decref(j_object);
+    if (NULL == message) return report_error(args->connection, "could not create json object", MHD_HTTP_INTERNAL_SERVER_ERROR); 
 
     // make response
-    int ret = buffer_queue_response(args->connection, s, JSON_CONTENT_TYPE, status_code);
-    free(s);
+    int ret = buffer_queue_response_ok(args->connection, message, JSON_CONTENT_TYPE);
+    free(message);
     return ret;
 }
 
@@ -126,14 +124,14 @@ get_sensor_data(struct func_args_t *args) {
 #endif
 
     json_t *jd = json_pack("{s:f,s:f}", "temperature", temp, "pressure", pres);
-    json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "board", board, "data", jd);
-    char *s = json_dumps(j , 0);
-    json_decref(j);
-    if (NULL == s) return report_error(args->connection, "could not create json", MHD_HTTP_OK); 
+    json_t *j_object = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "board", board, "data", jd);
+    char *message = json_dumps(j_object , 0);
+    json_decref(j_object);
+    if (NULL == message) return report_error(args->connection, "could not create json object", MHD_HTTP_INTERNAL_SERVER_ERROR); 
 
     // make response
-    int ret = buffer_queue_response_ok(args->connection, s, JSON_CONTENT_TYPE);
-    free(s);
+    int ret = buffer_queue_response_ok(args->connection, message, JSON_CONTENT_TYPE);
+    free(message);
     return ret;
 }
 
@@ -209,12 +207,12 @@ get_data_by_sensor_id(struct func_args_t *args) {
     if (NULL== sensor || 0 == match(sensor, "[0-9a-zA-Z]+"))
         return report_error(args->connection, "invalid sensor id", MHD_HTTP_BAD_REQUEST);
     if (strcmp(board, "bmp280") !=0)
-        return report_error(args->connection, "invalid board, currently only bmp280 is available", MHD_HTTP_OK); 
+        return report_error(args->connection, "invalid board, currently only bmp280 is available", MHD_HTTP_BAD_REQUEST); 
 
     // returning data series
     if (timespan != NULL) {
         if (0!=strcmp(args->version, MHD_HTTP_VERSION_1_1))
-            return report_error(args->connection, "timespan is only supported by HTTP/1.1", MHD_HTTP_HTTP_VERSION_NOT_SUPPORTED); 
+            return report_error(args->connection, "timespan is not supported by HTTP/1.0", MHD_HTTP_HTTP_VERSION_NOT_SUPPORTED); 
 
         // TODO
         // MHD_OPTION_CONNECTION_TIMEOUT
@@ -228,6 +226,11 @@ get_data_by_sensor_id(struct func_args_t *args) {
             info->func = &readTemperature;
         else if (strcmp(sensor, "pressure")==0)
             info->func = &readPressure;
+        else {
+            free(info);
+            return report_error(args->connection, "sensor not found", MHD_HTTP_BAD_REQUEST); 
+        } 
+            
     #else
         info->func = NULL;
     #endif
@@ -249,17 +252,17 @@ get_data_by_sensor_id(struct func_args_t *args) {
         else if (strcmp(sensor, "pressure")==0)
             value = readPressure();
         else
-            return report_error(args->connection, "invalid sensor", MHD_HTTP_OK); 
+            return report_error(args->connection, "invalid sensor", MHD_HTTP_BAD_REQUEST); 
     #endif
 
         json_t *jd = json_pack("{s:f}", sensor, value);
-        json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "board", board, "data", jd);
-        char *s = json_dumps(j , 0);
-        json_decref(j);
-        if (NULL == s) return report_error(args->connection, "could not create json", MHD_HTTP_OK); 
+        json_t *j_object = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "board", board, "data", jd);
+        char *message = json_dumps(j_object , 0);
+        json_decref(j_object);
+        if (NULL == message) return report_error(args->connection, "could not create json object", MHD_HTTP_INTERNAL_SERVER_ERROR); 
 
-        int ret = buffer_queue_response_ok(args->connection, s, JSON_CONTENT_TYPE);
-        free(s);
+        int ret = buffer_queue_response_ok(args->connection, message, JSON_CONTENT_TYPE);
+        free(message);
         return ret;
     }
 }
@@ -278,9 +281,9 @@ update_board_config(struct func_args_t *args) {
     if (NULL== board || 0 == match(board, "[0-9a-zA-Z]+"))
         return report_error(args->connection, "invalid id", MHD_HTTP_BAD_REQUEST);
     if (strcmp(board, "bmp280") !=0)
-        return report_error(args->connection, "invalid board, currently only bmp280 is available", MHD_HTTP_OK); 
+        return report_error(args->connection, "invalid board, currently only bmp280 is available", MHD_HTTP_BAD_REQUEST); 
     if (args->upload_data == NULL)
-        return report_error(args->connection, "invalid payoad", MHD_HTTP_OK); 
+        return report_error(args->connection, "invalid payoad", MHD_HTTP_BAD_REQUEST); 
 
     // parse string
     json_t *k = json_loads(args->upload_data , 0, NULL);
@@ -320,16 +323,17 @@ update_board_config(struct func_args_t *args) {
 
     setConfiguration(&conf);
     if (setConfiguration(&conf))
-        return report_error(args->connection, "configuration not changed", MHD_HTTP_OK); 
+        return report_error(args->connection, "configuration not changed", MHD_HTTP_INTERNAL_SERVER_ERROR); 
 #endif
 
-    json_t *j = json_pack("{s:s,s:s,s:s}", "status", "success", "message", "config saved", "board", board);
-    char *s = json_dumps(j , 0);
-    json_decref(j);
+    json_t *j_object = json_pack("{s:s,s:s,s:s}", "status", "success", "message", "config saved", "board", board);
+    char *message = json_dumps(j_object , 0);
+    if (NULL == message) return report_error(args->connection, "could not create json object", MHD_HTTP_INTERNAL_SERVER_ERROR); 
+    json_decref(j_object);
 
     // make response
-    int ret = buffer_queue_response_ok(args->connection, s, JSON_CONTENT_TYPE);
-    free(s);
+    int ret = buffer_queue_response_ok(args->connection, message, JSON_CONTENT_TYPE);
+    free(message);
     return ret;
 }
 
@@ -354,21 +358,22 @@ set_board_action(struct func_args_t *args) {
 #ifndef NO_SENSOR
     if (0==strcmp(action, "reset")){
         if (softReset()!=0) 
-            return report_error(args->connection, "reset action failed", MHD_HTTP_OK); 
+            return report_error(args->connection, "reset action failed", MHD_HTTP_INTERNAL_SERVER_ERROR); 
     }
     else {
-        return report_error(args->connection, "action not found", MHD_HTTP_OK); 
+        return report_error(args->connection, "action not found", MHD_HTTP_BAD_REQUEST); 
     }
 #endif
 
     json_t *jd = json_pack("{s:s}", "action", action);
-    json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "action set", "board", board, "data", jd);
-    char *s = json_dumps(j , 0);
-    json_decref(j);
+    json_t *j_object = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "action set", "board", board, "data", jd);
+    char *message = json_dumps(j_object , 0);
+    if (NULL == message) return report_error(args->connection, "could not create json object", MHD_HTTP_INTERNAL_SERVER_ERROR); 
+    json_decref(j_object);
 
     // make response
-    int ret = buffer_queue_response_ok(args->connection, s, JSON_CONTENT_TYPE);
-    free(s);
+    int ret = buffer_queue_response_ok(args->connection, message, JSON_CONTENT_TYPE);
+    free(message);
     return ret;
 }
 
@@ -394,16 +399,17 @@ set_board_mode(struct func_args_t *args) {
 
 #ifndef NO_SENSOR
     if (setPowerMode(imode)!=0) 
-        return report_error(args->connection, "mode action failed", MHD_HTTP_OK); 
+        return report_error(args->connection, "mode action failed", MHD_HTTP_INTERNAL_SERVER_ERROR); 
 #endif
 
     json_t *jd = json_pack("{s:s}", "mode", mode);
-    json_t *j = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "mode set", "board", board, "data", jd);
-    char *s = json_dumps(j , 0);
-    json_decref(j);
+    json_t *j_object = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "mode set", "board", board, "data", jd);
+    char *message = json_dumps(j_object , 0);
+    if (NULL == message) return report_error(args->connection, "could not create json object", MHD_HTTP_INTERNAL_SERVER_ERROR); 
+    json_decref(j_object);
 
     // make response
-    int ret = buffer_queue_response_ok(args->connection, s, JSON_CONTENT_TYPE);;
-    free(s);
+    int ret = buffer_queue_response_ok(args->connection, message, JSON_CONTENT_TYPE);;
+    free(message);
     return ret;
 }
