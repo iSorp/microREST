@@ -19,7 +19,7 @@ buffer_queue_response(struct MHD_Connection *connection, const char *message, ch
     // make response
     int ret = 1;
     struct MHD_Response * response;
-    response = MHD_create_response_from_buffer(strlen(message) , (void *)message, MHD_RESPMEM_PERSISTENT);
+    response = MHD_create_response_from_buffer(strlen(message) , (void *)message, MHD_RESPMEM_MUST_COPY);
     ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, content_type);
     ret &= MHD_queue_response(connection , status_code, response);
     MHD_destroy_response(response);
@@ -48,7 +48,7 @@ report_error(struct MHD_Connection *connection, const char *msg, int status_code
     // make response
     int ret = 1;
     struct MHD_Response * response;
-    response = MHD_create_response_from_buffer(strlen(message) , (void *)message, MHD_RESPMEM_PERSISTENT);
+    response = MHD_create_response_from_buffer(strlen(message) , (void *)message, MHD_RESPMEM_MUST_COPY);
     ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, JSON_CONTENT_TYPE);
     ret &= MHD_queue_response(connection, status_code, response);
     MHD_destroy_response(response);
@@ -89,12 +89,12 @@ split_url(char **parts, char *url, int *trailing_slash) {
 
 /**
 * The function finds values in a url defined by the url pattern.
-* For example /myroute/<myparam>/otherroute/
-* it returns the value of <myparam>
+* For example /myroute/{my_param}/otherroute/
+* it returns the value of {my_param}
 *
 * @param values 
-* @param pattern 
 * @param url 
+* @param pattern 
 * @return actual number of values, on error -1
 */
 int

@@ -58,14 +58,14 @@ generate_token() {
 */
 int
 user_auth(struct MHD_Connection *connection, int *valid) {
+    #ifdef BEARER_AUTH
+        return bearer_auth(connection, valid);
+    #endif
     #ifdef DIGEST_AUTH
         return digest_auth(connection, valid);
     #endif
     #ifdef BASIC_AUTH
         return basic_auth(connection, valid);
-    #endif
-    #ifdef BEARER_AUTH
-        return bearer_auth(connection, valid);
     #endif
 }
 
@@ -80,18 +80,17 @@ int
 basic_auth(struct MHD_Connection *connection, int *valid) {
     *valid = 0;
     int ret = 0;
-    char *message;
+    char *message, *pass;
     struct MHD_Response * response;
-    char *pass;
     char *username = MHD_basic_auth_get_username_password(connection , &pass);
-
+    
     if (0 != verify_user_password(username, pass)) {
         logger(WARNING, "basic authentication failed");
         json_t *j = json_pack("{s:s,s:s}", "status", "error", "message", "basic authentication failed");
         message = json_dumps(j , 0);
         json_decref(j);
-        response = MHD_create_response_from_buffer(strlen(message) , message , MHD_RESPMEM_PERSISTENT);
-        int ret = MHD_queue_basic_auth_fail_response(connection, "", response);
+        response = MHD_create_response_from_buffer(strlen(message) ,message ,MHD_RESPMEM_PERSISTENT);
+        ret = MHD_queue_basic_auth_fail_response(connection, "my_realm", response);
         MHD_destroy_response(response);
         free(message);
         return ret;

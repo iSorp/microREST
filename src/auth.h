@@ -1,9 +1,5 @@
 #include <microhttpd.h>
 
-//#define DIGEST_AUTH
-#define BASIC_AUTH
-//#define BEARER_AUTH
-
 /*
 * test function token generation
 *

@@ -1,5 +1,7 @@
 # options
-SENSOR=no
+SENSOR		= no #yes
+AUTH  		= BASIC_AUTH #DIGEST_AUTH
+BEARER		= no #yes
 
 LIB_PATH 	= $(HOME)/Library/libmicrohttpd
 SRC_DIR  	= src
@@ -19,8 +21,10 @@ ifeq ($(SENSOR),yes)
 else
 	CPPFLAGS += -DNO_SENSOR
 endif
-
-export LD_LIBRARY_PATH=$(LIB_PATH)/lib
+ifeq ($(BEARER),yes)
+	CPPFLAGS += -DBEARER
+endif
+CPPFLAGS += -D$(AUTH)
 
 
 all: $(TARGET)
@@ -35,4 +39,5 @@ clean :
 	rm -R *.out $(SRC_DIR)/*.o $(SRC_DIR)/*.a *.dSYM
 
 run:
+	export LD_LIBRARY_PATH=$(LIB_PATH)/lib
 	./httpserver.out

@@ -2,12 +2,11 @@
 
 #define PARAM_PREFIX '{'
 #define PARAM_SUFFIX '}'
-
 #define MAX_ROUTES 20
 #define MAX_ROUTE_PARTS 20
-#define MAX_ROUTE_PARAM 10
+#define MAX_ROUTE_PARAM 20
 #define MAX_URL_SIZE 256
-#define MAX_PAYLOAD 256
+#define MAX_PAYLOAD 1024
 #define JSON_CONTENT_TYPE "application/json"
 
 /**
@@ -22,13 +21,16 @@ struct func_args_t {
     const char **route_values;
 };
 
+/*
+* Route authentication type
+*/
 enum auth_e {
-    NO_AUTH,
-    AUTH
+    NO_AUTH,    // No authentication before route fuction call, auth. may perform later
+    AUTH        // Authentication before route fuction call 
 };
 
 /*
-* REST function type definition
+* Route function type definition
 */
 typedef int 
 (*fctptr)(struct func_args_t*);
@@ -37,7 +39,7 @@ typedef int
  * Structure containing route functions
  */
 struct routes_map_t {
-    fctptr rest_func; 
+    fctptr route_func; 
     enum auth_e auth_type;
     const char *method;
     const char *url_pattern;

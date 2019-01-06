@@ -1,7 +1,6 @@
 #include <string.h>
 #include <jansson.h>
 #include <time.h>
-#include <pthread.h>
 #ifndef NO_SENSOR
     #include <bmp280_defs.h>
     #include <bmp280i2c.h>
@@ -23,17 +22,17 @@ static int get_user_auth(struct func_args_t *args);
 //static int get_sensors(struct func_args_t *args);
 static int get_sensor_data(struct func_args_t *args);
 static int get_data_by_sensor_id(struct func_args_t *args); 
-static int update_board_config(struct func_args_t *args);
+static int set_board_config(struct func_args_t *args);
 static int set_board_action(struct func_args_t *args);
 static int set_board_mode(struct func_args_t *args);
 
 
 /********************** Route - Function map ************************/
-// Parameter are defined by {id} {param} usw..
+// Parameter are defined by {id}, {param} usw..
 
 struct routes_map_t rtable[MAX_ROUTES] = {
     { &get_status,              NO_AUTH,    "GET",      "/"},
-    { &get_user_auth,           AUTH,       "GET",      "/user/auth"},
+    { &get_user_auth,           NO_AUTH,    "GET",      "/user/auth"},
     //{ &add_user,                AUTH,       "POST",     "/user/"},
     //{ &update_user_by_id,       AUTH,       "PATCH",    "/user/{id}"},
     //{ &delete_user_by_id,       AUTH,       "DELETE",   "/user/{id}"},
@@ -43,7 +42,7 @@ struct routes_map_t rtable[MAX_ROUTES] = {
     //{ &get_sensors,             NO_AUTH,    "GET",      "/board/{id}/sensor/"},
     { &get_sensor_data,         NO_AUTH,    "GET",      "/board/{id}/sensor/data"},
     { &get_data_by_sensor_id,   NO_AUTH,    "GET",      "/board/{id}/sensor/{sensor}/data"},
-    { &update_board_config,     AUTH,       "PATCH",    "/board/{id}/config"},
+    { &set_board_config,        AUTH,       "PUT",      "/board/{id}/config"},
     { &set_board_action,        AUTH,       "PUT",      "/board/{id}/action"},
     { &set_board_mode,          AUTH,       "PUT",      "/board/{id}/mode"},
 };
@@ -64,7 +63,7 @@ get_status(struct func_args_t *args) {
     // create resource list
     json_t *resources = json_array();
     int i =0;
-    while (rtable[i].rest_func != NULL){
+    while (rtable[i].route_func != NULL){
         json_array_append_new(resources, json_string(rtable[i].url_pattern));  
         ++i;
     }
@@ -89,7 +88,18 @@ get_status(struct func_args_t *args) {
 */
 static int
 get_user_auth(struct func_args_t *args) {
-
+    // user authentication
+    int valid = 1, res = 0;
+    #ifdef DIGEST_AUTH
+        res = digest_auth(args->connection, &valid);
+    #endif 
+    #ifdef BASIC_AUTH
+        res = basic_auth(args->connection, &valid);
+    #endif  
+    if (valid == 0) {
+        return res;
+    }
+    
     const char *token = generate_token();
     json_t *j_object = json_pack("{s:s,s:s,s:s}", "status", "success", "message", "user authenticated, returning token", "token", token);
     char *message = json_dumps(j_object , 0);
@@ -274,7 +284,7 @@ get_data_by_sensor_id(struct func_args_t *args) {
 * @return #MHD_NO on error
 */
 static int
-update_board_config(struct func_args_t *args) {
+set_board_config(struct func_args_t *args) {
     
     // read the id, value and validate
     const char *board = args->route_values[0];
@@ -282,18 +292,19 @@ update_board_config(struct func_args_t *args) {
         return report_error(args->connection, "invalid id", MHD_HTTP_BAD_REQUEST);
     if (strcmp(board, "bmp280") !=0)
         return report_error(args->connection, "invalid board, currently only bmp280 is available", MHD_HTTP_BAD_REQUEST); 
-    if (args->upload_data == NULL)
-        return report_error(args->connection, "invalid payoad", MHD_HTTP_BAD_REQUEST); 
+
+    // check content type
+    const char *content_type = MHD_lookup_connection_value(args->connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_TYPE);
+    if (args->upload_data == NULL || strcmp(content_type, JSON_CONTENT_TYPE) != 0)
+        return report_error(args->connection, "invalid content! Content-Type: application/json required", MHD_HTTP_BAD_REQUEST); 
 
     // parse string
     json_t *k = json_loads(args->upload_data , 0, NULL);
- 
     json_t *j1 = json_object_get(k, "os_temp");
     json_t *j2 = json_object_get(k, "os_pres");
     json_t *j3 = json_object_get(k, "odr");
     json_t *j4 = json_object_get(k, "filter");
     json_t *j5 = json_object_get(k, "altitude");
-   
 
     // Validate json
     if (1 != json_is_integer(j1) || 1 != json_is_integer(j2) || 1 != json_is_integer(j3) || 1 != json_is_integer(j4) || 1 != json_is_integer(j5)) {
