@@ -1,17 +1,15 @@
 #include <string.h>
 #include <jansson.h>
-#include <time.h>
-#ifndef NO_SENSOR
-    #include <bmp280_defs.h>
-    #include <bmp280i2c.h>
-#endif
+#include <bmp280_defs.h>
+#include <bmp280i2c.h>
 
 #include "auth.h"
 #include "util.h"
 #include "resttools.h"
+#include "data_stream.h"
 
 /********************** Static function declarations ************************/
-int get_status(struct func_args_t *args);
+static int get_status(struct func_args_t *args);
 static int get_user_auth(struct func_args_t *args);
 //static int add_user(struct func_args_t *args);
 //static int update_user_by_id(struct func_args_t *args);
@@ -56,7 +54,7 @@ struct routes_map_t rtable[MAX_ROUTES] = {
 * @param params
 * @return #MHD_NO on error
 */
-int
+static int
 get_status(struct func_args_t *args) {
     int ret = 1;
  
@@ -145,59 +143,6 @@ get_sensor_data(struct func_args_t *args) {
     return ret;
 }
 
-// Struct and functions for long polling get request
-struct data_reader_info {
-    double (*func)();
-    char buffer[32];
-    int value_size;
-    int buffer_index;
-    int time_span;
-    clock_t clock_start; 
-};
-
-/*
-* Returns a stream of sensor values
-*/
-static ssize_t data_reader(void *cls, uint64_t pos, char *buf , size_t size_max) { 
-    struct data_reader_info *info = cls;
-
-    // stream ends after time span is reached
-    int time_msec  = (clock() - info->clock_start)*1000/CLOCKS_PER_SEC;
-    if (time_msec > info->time_span)
-        return MHD_CONTENT_READER_END_OF_STREAM; 
-
-    // read sensor value and copy it to the buffer
-    double value = 0.00;
-    if (info->buffer_index == 0)
-    {
-#ifndef NO_SENSOR
-        if (info->func != NULL)
-            value = info->func();
-#endif
-        sprintf(info->buffer, "%.4f", value);
-        info->value_size = sizeof(value);
-    }
-
-    // returning buffer
-    if (info->buffer_index < info->value_size) {
-        *buf = info->buffer[info->buffer_index++];
-        return 1;
-    }
-
-    // reset buffer index and start over
-    info->buffer_index = 0;
-    return 0;
-}
-
-void
-data_reader_completed(void *cls) {
-    struct data_reader_info *info = cls;
-    if (cls != NULL){
-        free(info);
-        info = NULL;
-    }
-}
-
 /*
 * This function returns the data of a specified sensor as a json string.
 * route: /board/{id}/sensor/{sensor}/data
@@ -207,11 +152,11 @@ data_reader_completed(void *cls) {
 static int
 get_data_by_sensor_id(struct func_args_t *args) {
 
-    const char *timespan = MHD_lookup_connection_value(args->connection , MHD_GET_ARGUMENT_KIND, "timespan");
-
-    // read id and validate
     const char *board = args->route_values[0]; 
     const char *sensor = args->route_values[1]; 
+    const char *timespan = MHD_lookup_connection_value(args->connection , MHD_GET_ARGUMENT_KIND, "timespan");
+
+    // validate parameters
     if (NULL== board || 0 == match(board, "[0-9a-zA-Z]+")) 
         return report_error(args->connection, "invalid board id", MHD_HTTP_BAD_REQUEST);
     if (NULL== sensor || 0 == match(sensor, "[0-9a-zA-Z]+"))
@@ -223,47 +168,22 @@ get_data_by_sensor_id(struct func_args_t *args) {
     if (timespan != NULL) {
         if (0!=strcmp(args->version, MHD_HTTP_VERSION_1_1))
             return report_error(args->connection, "timespan is not supported by HTTP/1.0", MHD_HTTP_HTTP_VERSION_NOT_SUPPORTED); 
+        if (0 == match(timespan, "[0-9]+"))
+            return report_error(args->connection, "timespan must be integer", MHD_HTTP_BAD_REQUEST);
 
-        // TODO
-        // MHD_OPTION_CONNECTION_TIMEOUT
-        struct data_reader_info *info = malloc(sizeof(struct data_reader_info));
-        info->buffer_index = 0;
-        info->value_size = 0;
-        info->time_span = atoi(timespan);
-        info->clock_start = clock();
-    #ifndef NO_SENSOR
-        if (strcmp(sensor, "temperature")==0)
-            info->func = &readTemperature;
-        else if (strcmp(sensor, "pressure")==0)
-            info->func = &readPressure;
-        else {
-            free(info);
-            return report_error(args->connection, "sensor not found", MHD_HTTP_BAD_REQUEST); 
-        } 
-            
-    #else
-        info->func = NULL;
-    #endif
-        // make response  
-        int ret = 1;
-        struct MHD_Response * response;
-        response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 1024, &data_reader , info, &data_reader_completed);
-        ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, JSON_CONTENT_TYPE);
-        ret &= MHD_queue_response(args->connection, MHD_HTTP_OK, response);
-        MHD_destroy_response(response);
-        return ret;
+        return init_data_stream(args, sensor, atoi(timespan));
     } 
     else
     {
         double value = 0;
-    #ifndef NO_SENSOR
-        if (strcmp(sensor, "temperature")==0)
-            value = readTemperature();
-        else if (strcmp(sensor, "pressure")==0)
-            value = readPressure();
-        else
-            return report_error(args->connection, "invalid sensor", MHD_HTTP_BAD_REQUEST); 
-    #endif
+        #ifndef NO_SENSOR
+            if (strcmp(sensor, "temperature")==0)
+                value = readTemperature();
+            else if (strcmp(sensor, "pressure")==0)
+                value = readPressure();
+            else
+                return report_error(args->connection, "invalid sensor", MHD_HTTP_BAD_REQUEST); 
+        #endif
 
         json_t *jd = json_pack("{s:f}", sensor, value);
         json_t *j_object = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "board", board, "data", jd);
@@ -286,12 +206,12 @@ get_data_by_sensor_id(struct func_args_t *args) {
 static int
 set_board_config(struct func_args_t *args) {
     
-    // read the id, value and validate
+    // validate board id
     const char *board = args->route_values[0];
     if (NULL== board || 0 == match(board, "[0-9a-zA-Z]+"))
-        return report_error(args->connection, "invalid id", MHD_HTTP_BAD_REQUEST);
+        return report_error(args->connection, "invalid board id", MHD_HTTP_BAD_REQUEST);
     if (strcmp(board, "bmp280") !=0)
-        return report_error(args->connection, "invalid board, currently only bmp280 is available", MHD_HTTP_BAD_REQUEST); 
+        return report_error(args->connection, "invalid board id, currently only bmp280 is available", MHD_HTTP_BAD_REQUEST); 
 
     // check content type
     const char *content_type = MHD_lookup_connection_value(args->connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_TYPE);
@@ -299,48 +219,44 @@ set_board_config(struct func_args_t *args) {
         return report_error(args->connection, "invalid content! Content-Type: application/json required", MHD_HTTP_BAD_REQUEST); 
 
     // parse string
-    json_t *k = json_loads(args->upload_data , 0, NULL);
-    json_t *j1 = json_object_get(k, "os_temp");
-    json_t *j2 = json_object_get(k, "os_pres");
-    json_t *j3 = json_object_get(k, "odr");
-    json_t *j4 = json_object_get(k, "filter");
-    json_t *j5 = json_object_get(k, "altitude");
+    json_t *k;
+    int j1, j2, j3, j4, j5;
+    k = json_loads(args->upload_data , 0, NULL);  
+    int jerror = json_unpack(k, "{s:i,s:i,s:i,s:i,s:i}",
+                "os_temp", &j1,
+                "os_pres", &j2,
+                "odr", &j3,
+                "filter", &j4,
+                "altitude", &j5      
+                );
 
     // Validate json
-    if (1 != json_is_integer(j1) || 1 != json_is_integer(j2) || 1 != json_is_integer(j3) || 1 != json_is_integer(j4) || 1 != json_is_integer(j5)) {
+    if (0 != jerror) {
         json_decref(k);
-        return report_error(args->connection, "int value required", MHD_HTTP_BAD_REQUEST);
-    }
-        
-    // Process uploaded data
-    int8_t os_temp = json_integer_value(j1);
-    int8_t os_pres = json_integer_value(j2);
-    int8_t odr = json_integer_value(j3);
-    int8_t filter = json_integer_value(j4);
-    int altitude = json_integer_value(j5);
-
+        return report_error(args->connection, "Data not valid", MHD_HTTP_BAD_REQUEST);
+    } 
     // drop the object reference
     json_decref(k);
 
-#ifndef NO_SENSOR
-    // load configuration, modify and save
-    struct bmp280_config conf;
-    getConfiguration(&conf);
+    #ifndef NO_SENSOR
+        // load configuration, modify and save
+        struct bmp280_config conf;
+        getConfiguration(&conf);
+        conf.os_temp = j1; 
+        conf.os_pres = j2;
+        conf.odr     = j3;
+        conf.filter  = j4;
+        //conf.altitude= j5;
 
-	conf.filter = filter;
-	conf.os_pres = os_pres;
-	conf.os_temp = os_temp; 
-	conf.odr = odr;
-
-    setConfiguration(&conf);
-    if (setConfiguration(&conf))
-        return report_error(args->connection, "configuration not changed", MHD_HTTP_INTERNAL_SERVER_ERROR); 
-#endif
+        setConfiguration(&conf);
+        if (setConfiguration(&conf))
+            return report_error(args->connection, "configuration not changed", MHD_HTTP_INTERNAL_SERVER_ERROR); 
+    #endif
 
     json_t *j_object = json_pack("{s:s,s:s,s:s}", "status", "success", "message", "config saved", "board", board);
     char *message = json_dumps(j_object , 0);
-    if (NULL == message) return report_error(args->connection, "could not create json object", MHD_HTTP_INTERNAL_SERVER_ERROR); 
     json_decref(j_object);
+    if (NULL == message) return report_error(args->connection, "could not create json object", MHD_HTTP_INTERNAL_SERVER_ERROR); 
 
     // make response
     int ret = buffer_queue_response_ok(args->connection, message, JSON_CONTENT_TYPE);
@@ -389,7 +305,7 @@ set_board_action(struct func_args_t *args) {
 }
 
 /*
-* This function fires an mode to a specified board. The action ist transfered by an url parameter.
+* This function fires a mode to a specified board. The action ist transfered by an url parameter.
 * route: /board/{id}/mode?mode=value
 * @param args
 * @return #MHD_NO on error

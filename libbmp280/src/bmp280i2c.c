@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <math.h>
+#include <time.h>
 
 #ifndef STANDALONE
     #include <linux/i2c-dev.h>

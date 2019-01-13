@@ -1,8 +1,7 @@
 # options
-STANDALONE=no
+STANDALONE=yes
 
-LIB_PATH = $(HOME)
-#/Library/libmicrohttpd
+LIB_PATH = $(HOME)/Library/libmicrohttpd
 
 SRC_DIR  	= src
 TARGET 		= libbmp280.a 

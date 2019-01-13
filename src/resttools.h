@@ -8,9 +8,23 @@
 #define MAX_URL_SIZE 256
 #define MAX_PAYLOAD 1024
 #define JSON_CONTENT_TYPE "application/json"
+#define MAX_VALUE_DIGITS 32
+
+
+/*
+* Structure containing connection information 
+*/
+struct con_info_t
+{
+    char *data;
+    int data_size;
+    int current_data_size;
+    int routes_map_index;
+    struct stream_info_t *stream_info;
+};
 
 /**
- * Structure containing argumens for the route functions
+ * Structure containing arguments for the route functions
  */
 struct func_args_t {
     struct MHD_Connection *connection;
@@ -19,6 +33,8 @@ struct func_args_t {
     const char *version;
     const char *upload_data;
     const char **route_values;
+
+    struct con_info_t *con_info;
 };
 
 /*

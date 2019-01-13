@@ -5,7 +5,7 @@ BEARER		= no #yes
 
 LIB_PATH 	= $(HOME)/Library/libmicrohttpd
 SRC_DIR  	= src
-LIBS 	 	= -lmicrohttpd -lz -ljansson -lm
+LIBS 	 	= -lmicrohttpd -ljansson -lm -lpthread
 INCLUDES 	= -I$(LIB_PATH)/include/
 LIBRARIES	= -L$(LIB_PATH)/lib/
 OBJ_FILES 	= $(patsubst %.c, %.o, $(wildcard $(SRC_DIR)/*.c))

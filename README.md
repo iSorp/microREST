@@ -17,9 +17,8 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 
 ### Libraries
 - lmicrohttpd
-- lz
+- lpthread
 - lm
-- lbmp280
 
 ### Routes
 
@@ -29,7 +28,7 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 | /user/auth                       | GET    | User basic authentication, returns a token                                           |
 | /board/{id}/sensor/data          | GET    | Returns all sensors data as a json string                                            |
 | /board/{id}/sensor/{sensor}/data | GET    | Returns the data of a specified sensor as a json string                              |
-| /board/{id}/config               | PATCH  | Sets the configuration of a specified board. The mode ist transfered by an post body |
+| /board/{id}/config               | PUT    | Sets the configuration of a specified board. The mode ist transfered by an post body |
 | /board/{id}/action               | PUT    | Fires an action to a specified board. The action ist transfered by an url parameter  |
 | /board/{id}/mode                 | PUT    | Fires an mode to a specified board. The action ist transfered by an url parameter    |
 
@@ -64,9 +63,9 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 
 #### Mode
 ```
-?mode=0x00 // Sleep
-?mode=0x01 // Forced
-?mode=0x03 // Normal
+?mode=0 // Sleep
+?mode=1 // Forced
+?mode=3 // Normal
 ```
 
 #### Action
@@ -80,72 +79,66 @@ Some routes support long polling get requests (only for HTTP 1.1)
 ?timespan=integer value
 ```
 Example: 
-/board/bmp280/sensor/temperature/data?timespan=10
+curl http://localhost:8888/board/bmp280/sensor/temperature/data?timespan=10
 
 ## Examples
 ```
-curl -X PATCH --digest -u admin:1234 --data '{"os_temp":1,"os_pres":1,"odr":5,"filter":1,"altitude":500}'  http://localhost:8888/board/bmp280/config
+curl -X PUT -u admin:1234 --header "Content-Type: application/json"  --data '{"os_temp":1,"os_pres":1,"odr":5,"filter":1,"altitude":500}' http://localhost:8888/board/bmp280/config
 ```
 
 
 ## Tests
-```
-siege -H 'Content-Type: application/json'  'http://localhost:8888/board/bmp280/config PATCH {"os_temp":1,"os_pres":1,"odr":5,"filter":1,"altitude":500}' 
-```
+### Siege
+
+siege -b -t5S http://localhost:8888/
 
 ```
-Lifting the server siege...
-Transactions:		       67706 hits
+Transactions:		        3800 hits
 Availability:		      100.00 %
-Elapsed time:		      282.10 secs
-Data transferred:	        4.33 MB
-Response time:		        0.10 secs
-Transaction rate:	      240.01 trans/sec
-Throughput:		        0.02 MB/sec
-Concurrency:		       24.83
-Successful transactions:       67706
+Elapsed time:		        4.99 secs
+Data transferred:	        0.66 MB
+Response time:		        0.03 secs
+Transaction rate:	      761.52 trans/sec
+Throughput:		        0.13 MB/sec
+Concurrency:		       24.26
+Successful transactions:        3800
 Failed transactions:	           0
-Longest transaction:	        0.64
+Longest transaction:	        0.07
 Shortest transaction:	        0.01
 ```
 
-```
-ab -c 8 -n 1000 http://localhost:8888/
-```
-```
-Server Software:        
-Server Hostname:        localhost
-Server Port:            8888
+With reading sensor data
 
-Document Path:          /
-Document Length:        182 bytes
+siege -b -t5s  http://localhost:8888/board/bmp280/sensor/temperature/data
 
-Concurrency Level:      8
-Time taken for tests:   1.909 seconds
-Complete requests:      1000
-Failed requests:        0
-Total transferred:      291000 bytes
-HTML transferred:       182000 bytes
-Requests per second:    523.96 [#/sec] (mean)
-Time per request:       15.268 [ms] (mean)
-Time per request:       1.909 [ms] (mean, across all concurrent requests)
-Transfer rate:          148.90 [Kbytes/sec] received
-
-Connection Times (ms)
-              min  mean[+/-sd] median   max
-Connect:        0    0   0.3      0       2
-Processing:     0   15  23.0      2      78
-Waiting:        0   13  22.2      2      76
-Total:          1   15  23.0      3      78
-
-Percentage of the requests served within a certain time (ms)
-  50%      3
-  66%      3
-  75%     16
-  80%     54
-  90%     56
-  95%     61
-  98%     66
-  99%     66
- 100%     78 (longest request)
 ```
+Transactions:		        1120 hits
+Availability:		      100.00 %
+Elapsed time:		        4.20 secs
+Data transferred:	        0.12 MB
+Response time:		        0.09 secs
+Transaction rate:	      266.67 trans/sec
+Throughput:		        0.03 MB/sec
+Concurrency:		       24.53
+Successful transactions:        1120
+Failed transactions:	           0
+Longest transaction:	        0.13
+Shortest transaction:	        0.01
+```
+
+
+### Valgrind
+```
+valgrind  --leak-check=full --show-leak-kinds=all ./httpserver.out
+valgrind --tool=massif  ./httpserver.out
+```
+
+Memory consumption GET http://localhost:8888/
+![GitHub Logo](/doc/get.png)
+
+Memory consumption PUT http://localhost:8888/board/bmp280/config
+![GitHub Logo](/doc/put.png)
+
+Memory consumption GET 25 clients (long polling) http://localhost:8888/board/bmp280/sensor/temperature/data?timespan=100
+![GitHub Logo](/doc/stream.png)
+

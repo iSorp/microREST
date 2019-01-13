@@ -61,7 +61,7 @@ report_error(struct MHD_Connection *connection, const char *msg, int status_code
 *
 * @param parts 
 * @param url 
-* @param max_parts 
+* @param trailing_slash 
 * @return actual number of values, on error -1
 */
 int
@@ -146,6 +146,7 @@ route_table_index(const char *url) {
 */
 void
 regexify_routes(){
+    char * rpattern = "[0-9a-zA-Z]*";
     int i, x;
     for(i=0;i<MAX_ROUTES; i++){ 
      
@@ -161,7 +162,7 @@ regexify_routes(){
         for (x=0; x<count;x++){
             const char prefix[2] = { PARAM_PREFIX, '\0' };
             if (NULL != parts[x] && strstr(parts[x], prefix)!=NULL){
-                parts[x] = "[0-9a-zA-Z]*";
+                parts[x] = rpattern;
             }
         }
 
@@ -169,7 +170,7 @@ regexify_routes(){
         char *regexified_url = (char*)malloc(MAX_URL_SIZE);
         memset(regexified_url, 0, MAX_URL_SIZE);
 
-        // reassamble route begining with '^' and ending with '/$' 
+        // reassamble route begining with '^' and ending with '$' 
         strncat(regexified_url, "^", 1);
         for (x=0; x<count;x++){
             strncat(regexified_url, "/", 1);

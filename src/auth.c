@@ -6,8 +6,9 @@
 #include "auth.h"
 #include "resttools.h"
 
-
+// need be generated for each request
 #define MY_OPAQUE_STR "11733b200778ce33060f"
+
 #define USER "admin"
 #define PASSWORD "1234"
 #define TOKEN "4c078c9db4a85c59f1fd1544122586"
@@ -129,6 +130,7 @@ digest_auth(struct MHD_Connection *connection, int *valid) {
 
     // validate user credentials
     *valid = MHD_digest_auth_check(connection , "my_realm", username, PASSWORD, 300); 
+    MHD_free(username);
     if ((*valid==MHD_INVALID_NONCE) || (*valid == MHD_NO)) {
         logger(WARNING, "digest authentication failed");
         json_t *j = json_pack("{s:s,s:s}", "status", "error", "message", "digest authentication failed");
@@ -162,7 +164,7 @@ bearer_auth(struct MHD_Connection *connection, int *valid) {
     // check whether bearer token authentication header is found
     if (auth == NULL || strstr(auth, "Bearer")==NULL) {
         j = json_pack("{s:s,s:s}", "status", "error", "message", "Please send valid bearer token");
-        status_code = MHD_HTTP_UNAUTHORIZED;
+        status_code = MHD_HTTP_FORBIDDEN;
         *valid = 0;
     }
     else {
@@ -170,7 +172,7 @@ bearer_auth(struct MHD_Connection *connection, int *valid) {
         token = token +1;
         if (0 != verify_token(token)) {
             j = json_pack("{s:s,s:s}", "status", "error", "message", "Unauthorized access");
-            status_code = MHD_HTTP_UNAUTHORIZED;
+            status_code = MHD_HTTP_FORBIDDEN;
             *valid = 0;
         }
     }
