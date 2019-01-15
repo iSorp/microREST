@@ -7,16 +7,14 @@
 #include <limits.h>
 #include <pthread.h>
 #include <sys/queue.h>
+#include <bmp280i2c.h>
 
 #include "resttools.h"
 #include "util.h"
 #include "auth.h"
 #include "data_stream.h"
 
-#ifndef NO_SENSOR
-    #include <bmp280i2c.h>
-#endif
-
+//#define STREAM_THREAD
 #define PORT 8888
 #define MAX_POST_CLIENTS 1
 
@@ -190,6 +188,7 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
     return ret;
 }
 
+#ifdef STREAM_THREAD
 /*
 *  Polling for stream events
 */ 
@@ -211,8 +210,9 @@ stream_function_bw (void *arg) {
         else
             sleep(1);
     }
-    logger(INFO, "end data stream reader");
+    logger(INFO, "data stream reader exit");
 }
+#endif
 
 int
 main (void)
@@ -242,18 +242,38 @@ main (void)
     if (NULL == daemon)
         return 1;
     
+    // Polling for stream events
+#ifndef STREAM_THREAD
+    int count = 0;
+    struct con_list_entry *item;
+    struct timespec time[] = {{0, 1000000L}};
+    while (1) {
+        count = 0;item = NULL;
+        TAILQ_FOREACH(item, &head_con_list, con_list_entries) {
+            if (item->con_info->stream_info != NULL && item->con_info->stream_info->status == RUN)
+                stream_handler(item->con_info->stream_info);         
+            ++count;
+        }
+        if (count > 0)
+            nanosleep(time, NULL);
+        else
+            sleep(1);
+    }
+    // Polling for stream events in seperate thread
+#else
     //posix_memalign(&stack,PAGE_SIZE,STK_SIZE);
     pthread_t tid;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr, (size_t)PTHREAD_STACK_MIN);
     pthread_create(&tid, &attr, (void*)stream_function_bw, NULL);
+    
     logger(INFO, "start data stream reader");
-
     (void) getchar ();
 
     exit_thread = 1;
     pthread_join(tid, NULL);
+#endif
 
     // TODO wait for all connection to be resumed
     // TODO Free allocated regex pattern

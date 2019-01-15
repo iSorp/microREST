@@ -159,15 +159,16 @@ bearer_auth(struct MHD_Connection *connection, int *valid) {
     json_t *j;
     char *s;
     *valid = 1;
-    const char *auth = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_AUTHORIZATION);
 
     // check whether bearer token authentication header is found
+    const char *auth = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_AUTHORIZATION);
     if (auth == NULL || strstr(auth, "Bearer")==NULL) {
         j = json_pack("{s:s,s:s}", "status", "error", "message", "Please send valid bearer token");
         status_code = MHD_HTTP_FORBIDDEN;
         *valid = 0;
     }
     else {
+        // Verify Token
         char *token = strchr(auth, ' ');
         token = token +1;
         if (0 != verify_token(token)) {
@@ -177,13 +178,15 @@ bearer_auth(struct MHD_Connection *connection, int *valid) {
         }
     }
 
+    // Make response if verification failed
     if (0 == *valid) {
-        // make response
         s = json_dumps(j , 0);
         json_decref(j);
         ret = buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
         free(s);
     }
-    else logger(INFO, "token verification ok");
+    else 
+        logger(INFO, "token verification ok");
+        
     return ret;
 }
