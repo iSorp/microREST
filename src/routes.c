@@ -166,8 +166,6 @@ get_data_by_sensor_id(struct func_args_t *args) {
 
     // returning data series
     if (timespan != NULL) {
-        if (0!=strcmp(args->version, MHD_HTTP_VERSION_1_1))
-            return report_error(args->connection, "timespan is not supported by HTTP/1.0", MHD_HTTP_HTTP_VERSION_NOT_SUPPORTED); 
         if (0 == match(timespan, "[0-9]+"))
             return report_error(args->connection, "timespan must be integer", MHD_HTTP_BAD_REQUEST);
 
@@ -184,7 +182,7 @@ get_data_by_sensor_id(struct func_args_t *args) {
             else
                 return report_error(args->connection, "invalid sensor", MHD_HTTP_BAD_REQUEST); 
         #endif
-
+        
         json_t *jd = json_pack("{s:f}", sensor, value);
         json_t *j_object = json_pack("{s:s,s:s,s:s,s:o}", "status", "success", "message", "returning data", "board", board, "data", jd);
         char *message = json_dumps(j_object , 0);

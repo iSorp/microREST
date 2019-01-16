@@ -17,37 +17,6 @@ static void
 data_reader_completed_cb(void *cls);
 
 /****************** User Function  declarations *******************************/
-/*
-* Loop until timespan is reached. Writes the sensor value to a char buffer.
-* Signals MHD to process buffered data (MHD_resume_connection)
-* @param info
-*/
-void stream_handler(struct stream_info_t *info) {
-    
-    // wait until the buffer is processed
-    const union MHD_ConnectionInfo *con_info = MHD_get_connection_info(info->connection, MHD_CONNECTION_INFO_CONNECTION_SUSPENDED);
-    if (con_info->suspended == MHD_NO) return;
-
-    // stream ends after timespan is reached
-    int time_msec  = (clock() - info->clock_start)*1000/CLOCKS_PER_SEC;
-    double value = 999.9999;
-    #ifndef NO_SENSOR
-        if (info->sensor_func != NULL)
-            value = info->sensor_func();
-    #endif 
-
-    // TODO add more values to the buffer 
-    memset(info->buffer, 0, MAX_VALUE_DIGITS);
-    sprintf(info->buffer, "%.4f,", value);
-    info->value_size = strlen(info->buffer);
-
-    // end when time is reached
-    if (time_msec > info->time_span)
-        info->status = END;
-    
-    MHD_resume_connection(info->connection);
-}
-
 /* 
 * Initialize response from callback function
 * @param args
@@ -58,13 +27,14 @@ int
 init_data_stream(struct func_args_t *args, const char *sensor, int timespan) {
 
     struct stream_info_t *info = malloc(sizeof(struct stream_info_t));
+    args->con_info->stream_info = info;
     info->connection = args->connection;
     info->status = INIT;
     info->buffer_index = 0;
     info->value_size = 0;
     info->time_span = timespan;
-    info->clock_start = clock(); 
-
+    clock_gettime(CLOCK_MONOTONIC, &info->time_start);
+  
     #ifndef NO_SENSOR
         if (strcmp(sensor, "temperature")==0)
             info->sensor_func = &readTemperature;
@@ -78,8 +48,6 @@ init_data_stream(struct func_args_t *args, const char *sensor, int timespan) {
         info->sensor_func = NULL;
     #endif
 
-    args->con_info->stream_info = info;
-
     // make response from callback
     int ret = 1;
     struct MHD_Response * response;
@@ -87,8 +55,39 @@ init_data_stream(struct func_args_t *args, const char *sensor, int timespan) {
     ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, JSON_CONTENT_TYPE);
     ret &= MHD_queue_response(args->connection, MHD_HTTP_OK, response);
     MHD_destroy_response(response);
-    
     return ret;
+}
+
+/*
+* Loop until timespan is reached. Writes the sensor value to a char buffer.
+* Signals MHD to process buffered data (MHD_resume_connection)
+* @param info
+*/
+void stream_handler(struct stream_info_t *info) {
+    
+    // wait until the buffer is processed
+    const union MHD_ConnectionInfo *con_info = MHD_get_connection_info(info->connection, MHD_CONNECTION_INFO_CONNECTION_SUSPENDED);
+    if (con_info->suspended == MHD_NO) return;
+
+    // Read Sensor value
+    double value = 999.9999;
+    #ifndef NO_SENSOR
+        if (info->sensor_func != NULL)
+            value = info->sensor_func();
+    #endif 
+
+    // TODO add more values to the buffer 
+    memset(info->buffer, 0, MAX_VALUE_DIGITS);
+    sprintf(info->buffer, "%.4f,", value);
+    info->value_size = strlen(info->buffer);
+    
+    // stream ends after timespan is reached
+    struct timespec time;
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    if (time.tv_sec - info->time_start.tv_sec > info->time_span)
+        info->status = END;
+    
+    MHD_resume_connection(info->connection);
 }
 
 
@@ -101,6 +100,7 @@ static ssize_t
 data_reader_cb(void *cls, uint64_t pos, char *buf , size_t size_max) { 
     struct stream_info_t *info = cls;
 
+    // initialize state and wait stream handler is resuming
     if (info->status == INIT){
         info->status = RUN;
         MHD_suspend_connection(info->connection);

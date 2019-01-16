@@ -19,7 +19,7 @@ struct stream_info_t {
     int value_size;
     int buffer_index;
     int time_span;
-    clock_t clock_start;
+    struct timespec time_start;
     enum data_stream_status status;
 };
 

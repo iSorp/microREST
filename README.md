@@ -74,9 +74,9 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 ```
 
 #### Timespan
-Some routes support long polling get requests (only for HTTP 1.1)
+Some routes support long polling get requests
 ```
-?timespan=integer value
+?timespan=integer_seconds
 ```
 Example: 
 curl http://localhost:8888/board/bmp280/sensor/temperature/data?timespan=10
@@ -139,6 +139,6 @@ Memory consumption GET http://localhost:8888/
 Memory consumption PUT http://localhost:8888/board/bmp280/config
 ![GitHub Logo](/doc/put.png)
 
-Memory consumption GET 25 clients (long polling) http://localhost:8888/board/bmp280/sensor/temperature/data?timespan=100
+Memory consumption GET 25 clients (long polling) http://localhost:8888/board/bmp280/sensor/temperature/data?timespan=1
 ![GitHub Logo](/doc/stream.png)
 

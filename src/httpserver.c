@@ -10,9 +10,10 @@
 #include <bmp280i2c.h>
 
 #include "resttools.h"
+#include "data_stream.h"
 #include "util.h"
 #include "auth.h"
-#include "data_stream.h"
+
 
 //#define STREAM_THREAD
 #define PORT 8888
@@ -21,11 +22,9 @@
 static int exit_thread = 0;
 static unsigned int nr_of_uploading_clients = 0;
 
-// Initilize connection list
-struct con_info_t *g_con_info;
-TAILQ_HEAD(head_con_list_t, con_list_entry) head_con_list =
-TAILQ_HEAD_INITIALIZER(head_con_list);
-struct head_con_list_t *head_con_list_p;               
+// Connection list
+TAILQ_HEAD(head_con_list_t, con_list_entry) head_con_list = TAILQ_HEAD_INITIALIZER(head_con_list);
+struct head_con_list_t;               
 struct con_list_entry {   
     struct con_info_t *con_info;
     TAILQ_ENTRY(con_list_entry) con_list_entries; 
@@ -122,17 +121,18 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
         entry->con_info = con_info;
 
         // Route not found
-        if (con_info->routes_map_index < 0)
+        if (con_info->routes_map_index < 0 )
             return report_error(connection, "Route not found", MHD_HTTP_NOT_FOUND);
 
-        // Method not allowed
-        if (0 != strcmp(rtable[con_info->routes_map_index].method, method))
+        // Method not allowed 
+        // TODO make HEAD save for PUT config route
+        if (0 != strcmp(rtable[con_info->routes_map_index].method, method))//&& strcmp(method, "HEAD") != 0)
             return report_error(connection, "Method not allowed", MHD_HTTP_METHOD_NOT_ALLOWED);
 
         // User authentication
         if (AUTH == rtable[con_info->routes_map_index].auth_type) {
             int valid = 1, res = 0;
-            //res = user_auth(connection, &valid);
+            res = user_auth(connection, &valid);
             if (valid == 0) {
                 return res;
             }
@@ -188,7 +188,6 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
     return ret;
 }
 
-#ifdef STREAM_THREAD
 /*
 *  Polling for stream events
 */ 
@@ -196,23 +195,21 @@ static void
 stream_function_bw (void *arg) {
     int count = 0;
     struct con_list_entry *item;
-    struct timespec time[] = {{0, 1000000L}};
+    struct timespec time[] = {{0, 500000000L}};
     while (!exit_thread) {
         count = 0;item = NULL;
         TAILQ_FOREACH(item, &head_con_list, con_list_entries) {
-            if (item->con_info != NULL && item->con_info->stream_info != NULL && item->con_info->stream_info->status == RUN)
+            if (item->con_info->stream_info != NULL && item->con_info->stream_info->status == RUN)
                 stream_handler(item->con_info->stream_info);         
             ++count;
         }
 
         if (count > 0)
-            nanosleep(time, NULL);
+            nanosleep(time, NULL); // sleep 500ms for next value
         else
-            sleep(1);
+            sleep(1); // sleep a bit longer if no connection is available 
     }
-    logger(INFO, "data stream reader exit");
 }
-#endif
 
 int
 main (void)
@@ -234,7 +231,7 @@ main (void)
     daemon = MHD_start_daemon (MHD_ALLOW_SUSPEND_RESUME | MHD_USE_POLL_INTERNAL_THREAD, PORT, NULL, NULL,
                                 &answer_to_connection, NULL,
                                 MHD_OPTION_THREAD_STACK_SIZE,  (size_t)PTHREAD_STACK_MIN,
-                                MHD_OPTION_CONNECTION_TIMEOUT, (unsigned int) 120,
+                                MHD_OPTION_CONNECTION_TIMEOUT, (unsigned int) 30,
                                 MHD_OPTION_URI_LOG_CALLBACK, &uri_logger_cb, NULL,
                                 MHD_OPTION_NOTIFY_COMPLETED, request_completed,
                                 NULL, MHD_OPTION_END);
@@ -244,23 +241,9 @@ main (void)
     
     // Polling for stream events
 #ifndef STREAM_THREAD
-    int count = 0;
-    struct con_list_entry *item;
-    struct timespec time[] = {{0, 1000000L}};
-    while (1) {
-        count = 0;item = NULL;
-        TAILQ_FOREACH(item, &head_con_list, con_list_entries) {
-            if (item->con_info->stream_info != NULL && item->con_info->stream_info->status == RUN)
-                stream_handler(item->con_info->stream_info);         
-            ++count;
-        }
-        if (count > 0)
-            nanosleep(time, NULL);
-        else
-            sleep(1);
-    }
+    stream_function_bw(NULL);   
+#else 
     // Polling for stream events in seperate thread
-#else
     //posix_memalign(&stack,PAGE_SIZE,STK_SIZE);
     pthread_t tid;
     pthread_attr_t attr;
