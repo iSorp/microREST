@@ -103,11 +103,21 @@ softReset() {
 
 int 
 setPowerMode(int8_t mode) {
-
     // Set normal power mode
 	int8_t rslt = bmp280_set_power_mode(mode, &bmp280);
     if (rslt != BMP280_OK){
         printf("Unable to set power mode %i\n", rslt);
+        return rslt;
+	}
+    return 0;
+}
+
+int 
+getPowerMode(int8_t *mode) {
+    // Get normal power mode
+	int8_t rslt = bmp280_get_power_mode(mode, &bmp280);
+    if (rslt != BMP280_OK){
+        printf("Unable to get power mode %i\n", rslt);
         return rslt;
 	}
     return 0;

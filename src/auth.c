@@ -1,12 +1,13 @@
 #include <string.h>
 #include <stdio.h>
 #include <jansson.h>
+#include <microhttpd.h>
 
 #include "util.h"
 #include "auth.h"
 #include "resttools.h"
 
-// need be generated for each request
+// need to be generated for each request
 #define MY_OPAQUE_STR "11733b200778ce33060f"
 
 #define USER "admin"
@@ -35,9 +36,11 @@ verify_token(char *token) {
 */
 static int 
 verify_user_password(char *user , char *pass) {
-  if (user == NULL || pass == NULL)
-    return -1;
-  return strcmp(PASSWORD, pass);
+    if (user == NULL || pass == NULL)
+        return 0;
+    if (0==strcmp(USER, user) && 0==strcmp(PASSWORD, pass))
+        return 1;
+  return 0;
 }
 
 /*
@@ -85,12 +88,14 @@ basic_auth(struct MHD_Connection *connection, int *valid) {
     struct MHD_Response * response;
     char *username = MHD_basic_auth_get_username_password(connection , &pass);
     
-    if (0 != verify_user_password(username, pass)) {
+    if (1 != verify_user_password(username, pass)) {
         logger(WARNING, "basic authentication failed");
         json_t *j = json_pack("{s:s,s:s}", "status", "error", "message", "basic authentication failed");
         message = json_dumps(j , 0);
         json_decref(j);
-        response = MHD_create_response_from_buffer(strlen(message) ,message ,MHD_RESPMEM_PERSISTENT);
+
+        // make response
+        response = MHD_create_response_from_buffer(strlen(message) ,message ,MHD_RESPMEM_MUST_COPY);
         ret = MHD_queue_basic_auth_fail_response(connection, "my_realm", response);
         MHD_destroy_response(response);
         free(message);
@@ -121,7 +126,9 @@ digest_auth(struct MHD_Connection *connection, int *valid) {
         json_t *j = json_pack("{s:s,s:s}", "status", "info", "message", "requesting for digest authentication");
         char *message = json_dumps(j , 0);
         json_decref(j);
-        response = MHD_create_response_from_buffer(strlen(message), message , MHD_RESPMEM_PERSISTENT);
+
+        // make response
+        response = MHD_create_response_from_buffer(strlen(message), message , MHD_RESPMEM_MUST_COPY);
         int ret = MHD_queue_auth_fail_response(connection , "my_realm", MY_OPAQUE_STR, response, MHD_NO);
         MHD_destroy_response(response);
         free(message);
@@ -136,7 +143,9 @@ digest_auth(struct MHD_Connection *connection, int *valid) {
         json_t *j = json_pack("{s:s,s:s}", "status", "error", "message", "digest authentication failed");
         char *message = json_dumps(j , 0);
         json_decref(j);
-        response = MHD_create_response_from_buffer(strlen(message) , message , MHD_RESPMEM_PERSISTENT);
+
+        // make response
+        response = MHD_create_response_from_buffer(strlen(message) , message , MHD_RESPMEM_MUST_COPY);
         int ret = MHD_queue_auth_fail_response(connection , "" , MY_OPAQUE_STR, response , (*valid ==MHD_INVALID_NONCE) ? MHD_YES : MHD_NO);
         MHD_destroy_response(response);
         free(message);
@@ -155,35 +164,40 @@ digest_auth(struct MHD_Connection *connection, int *valid) {
 */
 int
 bearer_auth(struct MHD_Connection *connection, int *valid) {
-    int status_code, ret = 1;
-    json_t *j;
-    char *s;
+    int ret = 1;
+    json_t *j_object;
     *valid = 1;
-    const char *auth = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_AUTHORIZATION);
 
     // check whether bearer token authentication header is found
+    const char *auth = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_AUTHORIZATION);
     if (auth == NULL || strstr(auth, "Bearer")==NULL) {
-        j = json_pack("{s:s,s:s}", "status", "error", "message", "Please send valid bearer token");
-        status_code = MHD_HTTP_FORBIDDEN;
+        j_object = json_pack("{s:s,s:s}", "status", "error", "message", "Please send valid bearer token");
         *valid = 0;
     }
     else {
+        // Verify Token
         char *token = strchr(auth, ' ');
         token = token +1;
         if (0 != verify_token(token)) {
-            j = json_pack("{s:s,s:s}", "status", "error", "message", "Unauthorized access");
-            status_code = MHD_HTTP_FORBIDDEN;
+            j_object = json_pack("{s:s,s:s}", "status", "error", "message", "Unauthorized access");
             *valid = 0;
         }
     }
 
+    // generate response with WWW-Authenticate header
     if (0 == *valid) {
-        // make response
-        s = json_dumps(j , 0);
-        json_decref(j);
-        ret = buffer_queue_response(connection, s, JSON_CONTENT_TYPE, status_code);
-        free(s);
+        char *message = json_dumps(j_object , 0);
+        json_decref(j_object);
+        struct MHD_Response * response;
+        response = MHD_create_response_from_buffer(strlen(message) ,message, MHD_RESPMEM_MUST_COPY);
+        ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, JSON_CONTENT_TYPE);
+        ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_WWW_AUTHENTICATE, "Bearer");
+        ret &= MHD_queue_response(connection , MHD_HTTP_UNAUTHORIZED, response);
+        MHD_destroy_response(response);
+        free(message);
     }
-    else logger(INFO, "token verification ok");
+    else 
+        logger(INFO, "token verification ok");
+        
     return ret;
 }

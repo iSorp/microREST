@@ -6,10 +6,26 @@
 #define MAX_ROUTE_PARTS 20
 #define MAX_ROUTE_PARAM 20
 #define MAX_URL_SIZE 256
-#define MAX_PAYLOAD 1024
+#define MAX_PAYLOAD 256
 #define JSON_CONTENT_TYPE "application/json"
 #define MAX_VALUE_DIGITS 32
 
+/*
+* Route authentication type
+*/
+enum auth_e {
+    NO_AUTH,    // No authentication before route fuction call, auth. may perform later
+    AUTH        // Authentication before route fuction call 
+};
+
+/*
+* Route method type
+*/
+enum method_e {
+    GET = 1,    // No authentication before route fuction call, auth. may perform later
+    PUT = 2,     // Authentication before route fuction call 
+    HEAD = 4
+};
 
 /*
 * Structure containing connection information 
@@ -28,21 +44,12 @@ struct con_info_t
  */
 struct func_args_t {
     struct MHD_Connection *connection;
-    const char *url;
-    const char *method;
-    const char *version;
+    enum method_e method;
+
     const char *upload_data;
     const char **route_values;
 
     struct con_info_t *con_info;
-};
-
-/*
-* Route authentication type
-*/
-enum auth_e {
-    NO_AUTH,    // No authentication before route fuction call, auth. may perform later
-    AUTH        // Authentication before route fuction call 
 };
 
 /*
@@ -57,11 +64,20 @@ typedef int
 struct routes_map_t {
     fctptr route_func; 
     enum auth_e auth_type;
-    const char *method;
+    enum method_e method;
     const char *url_pattern;
     const char *url_regex;
 };
 struct routes_map_t rtable[MAX_ROUTES];
+
+/**
+* The function checks whether a requestet method is allowed. 
+*
+* @param method requested method as a char
+* @return method_e
+*/
+enum method_e
+get_enum_method(const char* method);
 
 /**
 * The function finds values in a url defined by the url pattern.

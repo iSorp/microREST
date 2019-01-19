@@ -1,7 +1,8 @@
 # options
 SENSOR		= no #yes
 AUTH  		= BASIC_AUTH #DIGEST_AUTH
-BEARER		= no #yes
+BEARER		= yes
+LOCAL_ONLY	= yes
 
 LIB_PATH 	= $(HOME)/Library/libmicrohttpd
 SRC_DIR  	= src
@@ -18,11 +19,13 @@ LD      	= gcc
 
 ifeq ($(SENSOR),yes)
 	LIBS += -lbmp280
-else
-	CPPFLAGS += -DNO_SENSOR
+	CPPFLAGS += -DSENSOR
 endif
 ifeq ($(BEARER),yes)
-	CPPFLAGS += -DBEARER
+	CPPFLAGS += -DBEARER_AUTH
+endif
+ifeq ($(LOCAL_ONLY),yes)
+	CPPFLAGS += -DLOCAL_ONLY
 endif
 CPPFLAGS += -D$(AUTH)
 

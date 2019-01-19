@@ -13,6 +13,9 @@ softReset();
 int 
 setPowerMode(int8_t mode);
 
+int 
+getPowerMode(int8_t *mode);
+
 int
 setConfiguration(struct bmp280_config *conf);
 

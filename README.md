@@ -22,15 +22,15 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 
 ### Routes
 
-| Route                            | Method | Description                                                                          |
-|----------------------------------|--------|--------------------------------------------------------------------------------------|
-| /                                | GET    | (root) the client can verify if the server responds to requests                      |
-| /user/auth                       | GET    | User basic authentication, returns a token                                           |
-| /board/{id}/sensor/data          | GET    | Returns all sensors data as a json string                                            |
-| /board/{id}/sensor/{sensor}/data | GET    | Returns the data of a specified sensor as a json string                              |
-| /board/{id}/config               | PUT    | Sets the configuration of a specified board. The mode ist transfered by an post body |
-| /board/{id}/action               | PUT    | Fires an action to a specified board. The action ist transfered by an url parameter  |
-| /board/{id}/mode                 | PUT    | Fires an mode to a specified board. The action ist transfered by an url parameter    |
+| Route                            | Method     | Description                                                                          |
+|----------------------------------|------------|--------------------------------------------------------------------------------------|
+| /                                | GET        | (root) the client can verify if the server responds to requests                      |
+| /user/auth                       | GET        | User basic authentication, returns a token                                           |
+| /board/{id}/sensor/data          | GET        | Returns all sensors data as a json string                                            |
+| /board/{id}/sensor/{sensor}/data | GET        | Returns the data of a specified sensor as a json string                              |
+| /board/{id}/config               | GET PUT    | Sets the configuration of a specified board. The mode ist transfered by an post body |
+| /board/{id}/action               | PUT        | Fires an action to a specified board. The action ist transfered by an url parameter  |
+| /board/{id}/mode                 | GET PUT    | Fires an mode to a specified board. The action ist transfered by an url parameter    |
 
 ### DATA
 
@@ -74,9 +74,9 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 ```
 
 #### Timespan
-Some routes support long polling get requests (only for HTTP 1.1)
+Some routes support long polling get requests
 ```
-?timespan=integer value
+?timespan=integer_seconds
 ```
 Example: 
 curl http://localhost:8888/board/bmp280/sensor/temperature/data?timespan=10
@@ -139,6 +139,6 @@ Memory consumption GET http://localhost:8888/
 Memory consumption PUT http://localhost:8888/board/bmp280/config
 ![GitHub Logo](/doc/put.png)
 
-Memory consumption GET 25 clients (long polling) http://localhost:8888/board/bmp280/sensor/temperature/data?timespan=100
+Memory consumption GET 25 clients (long polling) http://localhost:8888/board/bmp280/sensor/temperature/data?timespan=1
 ![GitHub Logo](/doc/stream.png)
 

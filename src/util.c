@@ -2,8 +2,9 @@
 #include <string.h>
 #include <time.h>
 #include <regex.h>
-
 #include "util.h"
+
+#define LOGGER_ACTIVE
 
 /*
 * Regex matching function
@@ -35,22 +36,24 @@ match(const char *string, const char *pattern) {
 */
 void 
 logger(enum tag_e tag, const char *message) {
-    char *tag_name;
-     switch (tag){
-         case ERROR:
-            tag_name = "error";
-            break;
-        case WARNING:
-            tag_name = "warning";
-            break;
-        case INFO:
-            tag_name = "info";
-            break;
-     }
+    #ifdef LOGGER_ACTIVE
+        char *tag_name;
+        switch (tag){
+            case ERROR:
+                tag_name = "error";
+                break;
+            case WARNING:
+                tag_name = "warning";
+                break;
+            case INFO:
+                tag_name = "info";
+                break;
+        }
 
-    time_t now;
-    time(&now);
-    char *time = ctime(&now);
-    //time[strlen(ctime(&now))-1] = '\0';
-    printf("%s [%s]: %s\n", time, tag_name, message);
+        time_t now;
+        time(&now);
+        char *time = ctime(&now);
+        //time[strlen(ctime(&now))-1] = '\0';
+        printf("%s [%s]: %s\n", time, tag_name, message);
+    #endif
 }
