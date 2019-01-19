@@ -1,11 +1,11 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <zlib.h>
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
 #include <pthread.h>
+#include <arpa/inet.h>
 #include <sys/queue.h>
 #include <bmp280i2c.h>
 
@@ -16,6 +16,7 @@
 
 
 //#define STREAM_THREAD
+#define LOCALHOST "127.0.0.1"
 #define PORT 8888
 #define MAX_POST_CLIENTS 1
 
@@ -30,14 +31,29 @@ struct con_list_entry {
     TAILQ_ENTRY(con_list_entry) con_list_entries; 
 };
 
-/*
- * Request-init function
- */
+
 static void *
 uri_logger_cb (void *cls, const char *uri) {
-    logger(INFO, "client request");
     logger(INFO, uri);
   return NULL;
+}
+
+int
+accept_policy_cb (void *cls, const struct sockaddr *addr,socklen_t addrlen) {
+    #ifdef LOCAL_ONLY
+        struct sockaddr_in *ad = (struct sockaddr_in*)addr;
+        char *ip = inet_ntoa(ad->sin_addr);
+        logger(INFO, "client request");
+        logger(INFO, ip);
+
+        if (ad->sin_family == AF_INET) {
+            if (strcmp(ip, LOCALHOST)==0)
+                return MHD_YES;
+        }
+        return MHD_NO;
+    #else
+        return MHD_YES;
+    #endif
 }
 
 /*
@@ -74,7 +90,7 @@ request_completed (void *cls, struct MHD_Connection *connection,
 }
 
 /*
- *  Assembling data chunks 
+ *  Assembling data chunks (because Data stays in memory, limit max upload size).  
  */
 static int 
 process_upload_data(struct con_info_t *con_info, const char *upload_data, int upload_data_size) {
@@ -125,8 +141,7 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
             return report_error(connection, "Route not found", MHD_HTTP_NOT_FOUND);
 
         // Method not allowed 
-        // TODO make HEAD save for PUT config route
-        if (0 != strcmp(rtable[con_info->routes_map_index].method, method))//&& strcmp(method, "HEAD") != 0)
+        if (0 == (rtable[con_info->routes_map_index].method & get_enum_method(method)))
             return report_error(connection, "Method not allowed", MHD_HTTP_METHOD_NOT_ALLOWED);
 
         // User authentication
@@ -139,19 +154,21 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
         }
 
         // Check max payload
-        const char *cl = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_LENGTH);
-        if (NULL != cl) {
-            int size = atoi(cl);
-            if (size > MAX_PAYLOAD)
-                return report_error(connection, "max payload 1024", MHD_HTTP_PAYLOAD_TOO_LARGE);
-            else {
-                // Limit max uploading clients
-                if (nr_of_uploading_clients >= MAX_POST_CLIENTS) 
-                    return report_error(connection, "Server is busy", MHD_HTTP_SERVICE_UNAVAILABLE);
+        if (0==strcmp(method, MHD_HTTP_METHOD_PUT)) {
+            const char *cl = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_LENGTH);
+            if (NULL != cl) {
+                int size = atoi(cl);
+                if (size > MAX_PAYLOAD)
+                    return report_error(connection, "max payload 32 Bytes", MHD_HTTP_PAYLOAD_TOO_LARGE);
+                else {
+                    // Limit max uploading clients
+                    if (nr_of_uploading_clients >= MAX_POST_CLIENTS) 
+                        return report_error(connection, "Server is busy", MHD_HTTP_SERVICE_UNAVAILABLE);
 
-                if (size > 0) {
-                    nr_of_uploading_clients++;
-                    con_info->data_size = size;
+                    if (size > 0) {
+                        nr_of_uploading_clients++;
+                        con_info->data_size = size;
+                    }
                 }
             }
         }
@@ -182,7 +199,12 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
     }
         
     // Route function call
-    struct func_args_t args = { connection, url, method, version, con_info->data, route_values, con_info};
+    struct func_args_t args = { 
+        connection, 
+        get_enum_method(method), 
+        con_info->data, 
+        route_values, 
+        con_info};
     int ret = rtable[con_info->routes_map_index].route_func(&args);
     free(url_val_buf);
     return ret;
@@ -214,7 +236,7 @@ stream_function_bw (void *arg) {
 int
 main (void)
 {
-    #ifndef NO_SENSOR
+    #ifdef SENSOR
         logger(INFO, "run with sensor");
         initI2C();
         initBmc280();
@@ -228,7 +250,8 @@ main (void)
     logger(INFO, "run server");
     struct MHD_Daemon *daemon;
   
-    daemon = MHD_start_daemon (MHD_ALLOW_SUSPEND_RESUME | MHD_USE_POLL_INTERNAL_THREAD, PORT, NULL, NULL,
+    daemon = MHD_start_daemon (MHD_ALLOW_SUSPEND_RESUME | MHD_USE_POLL_INTERNAL_THREAD, PORT,
+                                &accept_policy_cb, NULL, 
                                 &answer_to_connection, NULL,
                                 MHD_OPTION_THREAD_STACK_SIZE,  (size_t)PTHREAD_STACK_MIN,
                                 MHD_OPTION_CONNECTION_TIMEOUT, (unsigned int) 30,

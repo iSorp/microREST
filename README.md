@@ -22,15 +22,15 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 
 ### Routes
 
-| Route                            | Method | Description                                                                          |
-|----------------------------------|--------|--------------------------------------------------------------------------------------|
-| /                                | GET    | (root) the client can verify if the server responds to requests                      |
-| /user/auth                       | GET    | User basic authentication, returns a token                                           |
-| /board/{id}/sensor/data          | GET    | Returns all sensors data as a json string                                            |
-| /board/{id}/sensor/{sensor}/data | GET    | Returns the data of a specified sensor as a json string                              |
-| /board/{id}/config               | PUT    | Sets the configuration of a specified board. The mode ist transfered by an post body |
-| /board/{id}/action               | PUT    | Fires an action to a specified board. The action ist transfered by an url parameter  |
-| /board/{id}/mode                 | PUT    | Fires an mode to a specified board. The action ist transfered by an url parameter    |
+| Route                            | Method     | Description                                                                          |
+|----------------------------------|------------|--------------------------------------------------------------------------------------|
+| /                                | GET        | (root) the client can verify if the server responds to requests                      |
+| /user/auth                       | GET        | User basic authentication, returns a token                                           |
+| /board/{id}/sensor/data          | GET        | Returns all sensors data as a json string                                            |
+| /board/{id}/sensor/{sensor}/data | GET        | Returns the data of a specified sensor as a json string                              |
+| /board/{id}/config               | GET PUT    | Sets the configuration of a specified board. The mode ist transfered by an post body |
+| /board/{id}/action               | PUT        | Fires an action to a specified board. The action ist transfered by an url parameter  |
+| /board/{id}/mode                 | GET PUT    | Fires an mode to a specified board. The action ist transfered by an url parameter    |
 
 ### DATA
 

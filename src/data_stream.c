@@ -35,7 +35,7 @@ init_data_stream(struct func_args_t *args, const char *sensor, int timespan) {
     info->time_span = timespan;
     clock_gettime(CLOCK_MONOTONIC, &info->time_start);
   
-    #ifndef NO_SENSOR
+    #ifdef SENSOR
         if (strcmp(sensor, "temperature")==0)
             info->sensor_func = &readTemperature;
         else if (strcmp(sensor, "pressure")==0)
@@ -71,7 +71,7 @@ void stream_handler(struct stream_info_t *info) {
 
     // Read Sensor value
     double value = 999.9999;
-    #ifndef NO_SENSOR
+    #ifdef SENSOR
         if (info->sensor_func != NULL)
             value = info->sensor_func();
     #endif 

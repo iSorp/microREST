@@ -124,6 +124,25 @@ get_route_values(const char **values, char* url, const char *pattern) {
     return index;
 }
 
+
+/**
+* The function returns a method enumeration. 
+*
+* @param method requested method as a char
+* @return method_e
+*/
+enum method_e
+get_enum_method(const char* method) {
+    enum method_e _e = 0;
+    if (strcmp(MHD_HTTP_METHOD_GET, method) == 0)
+        _e = GET;
+    else if (strcmp(MHD_HTTP_METHOD_HEAD, method) == 0)
+        _e = HEAD;
+    else if (strcmp(MHD_HTTP_METHOD_PUT, method) == 0)
+        _e = PUT;
+    return _e;
+}
+
 /**
 * Returns the index of the route table on which the url_pattern matches a given url.
 * @param url 
