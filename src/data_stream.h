@@ -6,13 +6,15 @@
 enum data_stream_status {
     INIT,
     RUN,
-    END
+    END,
+    EXIT
 };
 
 /*
 * Structure containing information information for data streaming 
 */
 struct stream_info_t {
+    struct MHD_Response *response;
     struct MHD_Connection *connection;
     double (*sensor_func)();
     char buffer[MAX_VALUE_DIGITS];

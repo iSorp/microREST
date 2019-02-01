@@ -31,6 +31,12 @@ struct con_list_entry {
     TAILQ_ENTRY(con_list_entry) con_list_entries; 
 };
 
+static int 
+report_error_max_upload(struct MHD_Connection *connection) {
+    char mess[30];
+    snprintf(mess, sizeof(mess), "%s%i","max payload in bytes: ", MAX_PAYLOAD);
+    return report_error(connection, mess, MHD_HTTP_PAYLOAD_TOO_LARGE);
+}
 
 static void *
 uri_logger_cb (void *cls, const char *uri) {
@@ -38,7 +44,7 @@ uri_logger_cb (void *cls, const char *uri) {
   return NULL;
 }
 
-int
+static int
 accept_policy_cb (void *cls, const struct sockaddr *addr,socklen_t addrlen) {
     #ifdef LOCAL_ONLY
         struct sockaddr_in *ad = (struct sockaddr_in*)addr;
@@ -79,7 +85,7 @@ request_completed (void *cls, struct MHD_Connection *connection,
     // free connection info
     if (con_cls != NULL && con_info != NULL) {
 
-        if (con_info->data_size > 0)
+        if (con_info->method == PUT)
             nr_of_uploading_clients--;
         if (con_info->data != NULL)
             free(con_info->data);       
@@ -96,16 +102,18 @@ static int
 process_upload_data(struct con_info_t *con_info, const char *upload_data, int upload_data_size) {
     // prepare memory allocation
     if (con_info->data == NULL) {
-        con_info->data = (char*)malloc(con_info->data_size + 1);
-        memset(con_info->data, '\0', con_info->data_size + 1);
+        con_info->data = (char*)malloc(0);
     }
+
     // Check actual data size
-    if (con_info->current_data_size + upload_data_size > con_info->data_size)
+    if (con_info->data_size + upload_data_size > MAX_PAYLOAD)
         return 0;
     
     // Copy data to the connection info object
-    memcpy(con_info->data + con_info->current_data_size, upload_data, upload_data_size);
-    con_info->current_data_size += upload_data_size;
+    con_info->data = (char*)realloc(con_info->data, con_info->data_size + upload_data_size + 1);
+    memset(con_info->data + con_info->data_size, '\0', upload_data_size + 1);
+    memcpy(con_info->data + con_info->data_size, upload_data, upload_data_size);
+    con_info->data_size += upload_data_size;
     return 1;
 }
 
@@ -128,7 +136,7 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
         con_info->stream_info = NULL;
         con_info->data = NULL;
         con_info->data_size = 0;
-        con_info->current_data_size = 0;
+        con_info->method = get_enum_method(method);
         con_info->routes_map_index = route_table_index(url);
 
         // Add connection info to the connection list
@@ -141,7 +149,7 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
             return report_error(connection, "Route not found", MHD_HTTP_NOT_FOUND);
 
         // Method not allowed 
-        if (0 == (rtable[con_info->routes_map_index].method & get_enum_method(method)))
+        if (0 == (rtable[con_info->routes_map_index].method & con_info->method))
             return report_error(connection, "Method not allowed", MHD_HTTP_METHOD_NOT_ALLOWED);
 
         // User authentication
@@ -152,26 +160,25 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
                 return res;
             }
         }
+       
+        // Check upload
+        const char *cl = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_LENGTH);         
+        int size = 0;
+        if (cl != NULL) size = atoi(cl); 
+        if (con_info->method == PUT) 
+        {
+            if (size > MAX_PAYLOAD)
+                report_error_max_upload(connection);
 
-        // Check max payload
-        if (0==strcmp(method, MHD_HTTP_METHOD_PUT)) {
-            const char *cl = MHD_lookup_connection_value(connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_LENGTH);
-            if (NULL != cl) {
-                int size = atoi(cl);
-                if (size > MAX_PAYLOAD)
-                    return report_error(connection, "max payload 32 Bytes", MHD_HTTP_PAYLOAD_TOO_LARGE);
-                else {
-                    // Limit max uploading clients
-                    if (nr_of_uploading_clients >= MAX_POST_CLIENTS) 
-                        return report_error(connection, "Server is busy", MHD_HTTP_SERVICE_UNAVAILABLE);
-
-                    if (size > 0) {
-                        nr_of_uploading_clients++;
-                        con_info->data_size = size;
-                    }
-                }
-            }
+            // Limit max uploading clients
+            if (nr_of_uploading_clients >= MAX_POST_CLIENTS) 
+                return report_error(connection, "Server is busy", MHD_HTTP_SERVICE_UNAVAILABLE);
+            nr_of_uploading_clients++;
         }
+        else if (size > 0 ) {
+            return report_error(connection, "upload not allowed", MHD_HTTP_BAD_REQUEST);
+        }
+        
         return MHD_YES;
     }
 
@@ -180,14 +187,16 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
 
     // Data upload
     if (*upload_data_size != 0) {   
-        
-        int data_ret = process_upload_data(con_info, upload_data, *upload_data_size);
-        *upload_data_size = 0;
-        if (!data_ret)
-            return report_error(connection, "payload too large", MHD_HTTP_PAYLOAD_TOO_LARGE);
+        if (con_info->method == PUT) {
+            int data_ret = process_upload_data(con_info, upload_data, *upload_data_size);
+            *upload_data_size = 0;
+            if (!data_ret) 
+                return report_error_max_upload(connection);
 
-        // Continue with upload -> next chunk
-        return MHD_YES;
+            // Continue with upload
+            return MHD_YES;
+        }
+        return report_error(connection, "upload not allowed", MHD_HTTP_BAD_REQUEST);
     }
 
     // Search for route parameters (http://localhost/test{id}/test2{id2})
@@ -201,7 +210,7 @@ answer_to_connection(void *cls, struct MHD_Connection *connection,
     // Route function call
     struct func_args_t args = { 
         connection, 
-        get_enum_method(method), 
+        con_info->method, 
         con_info->data, 
         route_values, 
         con_info};

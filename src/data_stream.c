@@ -26,8 +26,14 @@ data_reader_completed_cb(void *cls);
 int
 init_data_stream(struct func_args_t *args, const char *sensor, int timespan) {
 
-    struct stream_info_t *info = malloc(sizeof(struct stream_info_t));
+    struct stream_info_t *info = malloc(sizeof(struct stream_info_t));    
+
+    // make response from callback
+    struct MHD_Response * response;
+    response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 1024, &data_reader_cb , info, &data_reader_completed_cb);
+
     args->con_info->stream_info = info;
+    info->response = response;
     info->connection = args->connection;
     info->status = INIT;
     info->buffer_index = 0;
@@ -48,11 +54,10 @@ init_data_stream(struct func_args_t *args, const char *sensor, int timespan) {
         info->sensor_func = NULL;
     #endif
 
-    // make response from callback
+    // headers
     int ret = 1;
-    struct MHD_Response * response;
-    response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 1024, &data_reader_cb , info, &data_reader_completed_cb);
     ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, JSON_CONTENT_TYPE);
+    ret &= MHD_add_response_header(response, MHD_HTTP_HEADER_TRAILER, MHD_HTTP_HEADER_DATE);
     ret &= MHD_queue_response(args->connection, MHD_HTTP_OK, response);
     MHD_destroy_response(response);
     return ret;
@@ -85,7 +90,7 @@ void stream_handler(struct stream_info_t *info) {
     struct timespec time;
     clock_gettime(CLOCK_MONOTONIC, &time);
     if (time.tv_sec - info->time_start.tv_sec > info->time_span)
-        info->status = END;
+        info->status = EXIT;
     
     MHD_resume_connection(info->connection);
 }
@@ -93,33 +98,50 @@ void stream_handler(struct stream_info_t *info) {
 
 /****************** Static Function Definitions *******************************/
 
+static char *
+getTime() {
+    time_t now = time(&now);
+    struct tm *ptm = gmtime(&now);
+    char *s = asctime(ptm);
+    s[strlen(s)-1] = '\0';
+    return s;
+}
+
 /*
 * Response callback 
 */
 static ssize_t 
 data_reader_cb(void *cls, uint64_t pos, char *buf , size_t size_max) { 
     struct stream_info_t *info = cls;
-
-    // initialize state and wait stream handler is resuming
-    if (info->status == INIT){
-        info->status = RUN;
-        MHD_suspend_connection(info->connection);
-        return 0;
+    ssize_t ret = 0;
+    switch (info->status)
+    {
+        case INIT:  // initialize state and wait for stream handler is resuming
+            info->status = RUN;
+            MHD_suspend_connection(info->connection);
+            ret = 0;
+            break;
+        case RUN:   // returning buffer
+            if (info->buffer_index < info->value_size) {
+                *buf = info->buffer[info->buffer_index++]; 
+                ret = 1;
+            }
+            else info->status = END;      
+            break;
+        case END:    // reset buffer index and wait for stream handler is resuming
+            info->buffer_index = 0;
+            info->status = RUN;
+            ret = 0;
+            MHD_suspend_connection(info->connection);
+            break;
+        case EXIT:  // end of stream, add trailer  
+            MHD_add_response_footer(info->response, MHD_HTTP_HEADER_DATE, getTime());
+            ret = MHD_CONTENT_READER_END_OF_STREAM; 
+            break;
+        default:
+            ret = MHD_CONTENT_READER_END_WITH_ERROR; 
     }
-
-    if (info->status == END)
-        return MHD_CONTENT_READER_END_OF_STREAM; 
-
-    // returning buffer
-    if (info->buffer_index < info->value_size) {
-        *buf = info->buffer[info->buffer_index++]; 
-        return 1;
-    }
-
-    // reset buffer index and wait for next value
-    info->buffer_index = 0;
-    MHD_suspend_connection(info->connection);
-    return 0;
+     return ret;
 }
 
 /*
