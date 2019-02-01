@@ -34,8 +34,8 @@ struct con_info_t
 {
     char *data;
     int data_size;
-    int current_data_size;
     int routes_map_index;
+    enum method_e method;
     struct stream_info_t *stream_info;
 };
 

@@ -4,7 +4,7 @@
 The service provides functions to read sensor data and write configurations.
 
 ### Supported Emvoirments
-The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
+The code was testet on a Raspberry PI 3, i2c interface, bmp280 sensor board
 
 ### Supported Authentication
 - Basic
@@ -16,9 +16,9 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 - Air pressure
 
 ### Libraries
-- lmicrohttpd
-- lpthread
-- lm
+- libmicrohttpd
+- libpthread
+- libm
 
 ### Routes
 
@@ -28,9 +28,9 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 | /user/auth                       | GET        | User basic authentication, returns a token                                           |
 | /board/{id}/sensor/data          | GET        | Returns all sensors data as a json string                                            |
 | /board/{id}/sensor/{sensor}/data | GET        | Returns the data of a specified sensor as a json string                              |
-| /board/{id}/config               | GET PUT    | Sets the configuration of a specified board. The mode ist transfered by an post body |
-| /board/{id}/action               | PUT        | Fires an action to a specified board. The action ist transfered by an url parameter  |
-| /board/{id}/mode                 | GET PUT    | Fires an mode to a specified board. The action ist transfered by an url parameter    |
+| /board/{id}/config               | GET PUT    | Sets or gets the configuration of a specified board. The config is transferred by HTTP body |
+| /board/{id}/action               | PUT        | Fires an action to a specified board. The action is transferred by url query  |
+| /board/{id}/mode                 | GET PUT    | Sets or gets the mode of a specified board. The mode is transferred by url query    |
 
 ### DATA
 
@@ -40,8 +40,6 @@ The code was testet on a Rasperry PI 3, i2c interface, bmp280 sensor board
 ```json 
 {
     "status": success/invalid,
-    "message": string,
-    "board": string,
     "data": {
         "temperature": double,
         "pressure": double
@@ -126,6 +124,46 @@ Longest transaction:	        0.13
 Shortest transaction:	        0.01
 ```
 
+### Apache Benchmark
+```
+ab -t5 -c25 http://localhost:8888/
+
+Server Software:        
+Server Hostname:        localhost
+Server Port:            8888
+
+Document Path:          /
+Document Length:        182 bytes
+
+Concurrency Level:      25
+Time taken for tests:   5.000 seconds
+Complete requests:      21689
+Failed requests:        0
+Total transferred:      6311499 bytes
+HTML transferred:       3947398 bytes
+Requests per second:    4337.74 [#/sec] (mean)
+Time per request:       5.763 [ms] (mean)
+Time per request:       0.231 [ms] (mean, across all concurrent requests)
+Transfer rate:          1232.70 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.1      0       2
+Processing:     1    6   0.4      6       7
+Waiting:        1    6   0.4      6       7
+Total:          3    6   0.3      6       7
+
+Percentage of the requests served within a certain time (ms)
+  50%      6
+  66%      6
+  75%      6
+  80%      6
+  90%      6
+  95%      6
+  98%      6
+  99%      7
+ 100%      7 (longest request)
+```
 
 ### Valgrind
 ```

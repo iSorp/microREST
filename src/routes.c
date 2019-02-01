@@ -244,7 +244,7 @@ board_config(struct func_args_t *args) {
     if (args->method == PUT) {
         // check content type
         const char *content_type = MHD_lookup_connection_value(args->connection , MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_TYPE);
-        if (args->upload_data == NULL || strcmp(content_type, JSON_CONTENT_TYPE) != 0)
+        if (args->upload_data == NULL || content_type == NULL || strcmp(content_type, JSON_CONTENT_TYPE) != 0)
             return report_error(args->connection, "invalid content! Content-Type: application/json required", MHD_HTTP_BAD_REQUEST); 
 
         // parse string
